@@ -9,14 +9,32 @@
  *             API key via /api/oauth/claude_cli/create_api_key.
  *             Proxy injects real OAuth token on that exchange request;
  *             subsequent requests carry the temp key which is valid as-is.
+ *
+ * Permission approval:
+ *   When `approvalCallbacks` is passed, all non-Anthropic traffic requires
+ *   explicit approval via Telegram. HTTP and HTTPS (CONNECT) are both handled.
  */
 import { createServer, Server } from 'http';
 import { request as httpsRequest } from 'https';
 import { request as httpRequest, RequestOptions } from 'http';
+import net from 'net';
+import fs from 'fs';
+import path from 'path';
+
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
+import { DATA_DIR } from './config.js';
+import { insertPermissionRule } from './db.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
+import {
+  checkPermissionRule,
+  type EgressType,
+} from './permission-rule-engine/rule-engine.js';
+import {
+  generateRuleProposal,
+  type RuleProposal,
+} from './permission-rule-generator.js';
 
 // Create proxy agent for upstream HTTPS requests if proxy env vars are set
 const envProxyUrl =
@@ -34,9 +52,194 @@ export interface ProxyConfig {
   authMode: AuthMode;
 }
 
+export interface PermissionRequest {
+  requestId: string;
+  egressType: EgressType;
+  subject: string; // Full URL or hostname:port
+  groupFolder: string;
+  chatJid: string;
+  proposal: RuleProposal | null;
+}
+
+export interface PermissionApprovalCallbacks {
+  /** Returns the group folder and chatJid for the container making the request.
+   *  The proxy has no direct way to know which container's request it is
+   *  (containers connect via host.docker.internal), so the host passes a resolver. */
+  resolveGroup: () => { groupFolder: string; chatJid: string } | null;
+  /** Send a 3-button (or 2-button if proposal is null) Telegram message.
+   *  Returns the Telegram message ID so it can be tracked for restart cleanup. */
+  sendPermissionRequest: (req: PermissionRequest) => Promise<number | null>;
+  /** Called when a Telegram button is tapped. */
+  onPermissionResponse: (
+    requestId: string,
+    decision: 'once' | 'always' | 'deny',
+    proposal: RuleProposal | null,
+    groupFolder: string,
+  ) => void;
+}
+
+// ---------------------------------------------------------------------------
+// Pending messages log (restart cleanup)
+// ---------------------------------------------------------------------------
+
+const PENDING_PROXY_MESSAGES_FILE = path.join(
+  DATA_DIR,
+  'pending-proxy-messages.jsonl',
+);
+
+interface PendingProxyMessage {
+  messageId: number;
+  chatJid: string;
+  requestId: string;
+  ts: string;
+}
+
+function appendPendingMessage(entry: PendingProxyMessage): void {
+  try {
+    fs.mkdirSync(path.dirname(PENDING_PROXY_MESSAGES_FILE), {
+      recursive: true,
+    });
+    fs.appendFileSync(
+      PENDING_PROXY_MESSAGES_FILE,
+      JSON.stringify(entry) + '\n',
+      'utf-8',
+    );
+  } catch {
+    // Non-critical — do not let logging failures break the proxy
+  }
+}
+
+export function clearPendingProxyMessages(): void {
+  try {
+    fs.writeFileSync(PENDING_PROXY_MESSAGES_FILE, '', 'utf-8');
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadPendingProxyMessages(): PendingProxyMessage[] {
+  try {
+    const content = fs.readFileSync(PENDING_PROXY_MESSAGES_FILE, 'utf-8');
+    return content
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as PendingProxyMessage);
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Permission approval
+// ---------------------------------------------------------------------------
+
+const PERMISSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+interface PendingPermission {
+  resolve: (decision: 'allow' | 'deny') => void;
+  egressType: EgressType;
+  proposal: RuleProposal | null;
+  groupFolder: string;
+}
+
+/** Pending permission requests: requestId → pending data */
+const pendingPermissions = new Map<string, PendingPermission>();
+
+/** Called by Telegram callback handler when a button is tapped */
+export function resolvePermission(
+  requestId: string,
+  decision: 'allow' | 'deny',
+): void {
+  pendingPermissions.get(requestId)?.resolve(decision);
+  pendingPermissions.delete(requestId);
+}
+
+async function checkWithApproval(
+  egressType: EgressType,
+  subject: string,
+  groupFolder: string,
+  chatJid: string,
+  callbacks: PermissionApprovalCallbacks,
+): Promise<'allow' | 'deny'> {
+  // Check rule engine first
+  const ruleDecision = checkPermissionRule(egressType, subject, groupFolder);
+  if (ruleDecision !== undefined) {
+    return ruleDecision;
+  }
+
+  // No matching rule — call Haiku then send Telegram
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const proposal = await generateRuleProposal(egressType, subject);
+
+  const messageId = await callbacks.sendPermissionRequest({
+    requestId,
+    egressType,
+    subject,
+    groupFolder,
+    chatJid,
+    proposal,
+  });
+
+  if (messageId !== null) {
+    appendPendingMessage({
+      messageId,
+      chatJid,
+      requestId,
+      ts: new Date().toISOString(),
+    });
+  }
+
+  // Block until response or timeout
+  return new Promise<'allow' | 'deny'>((resolve) => {
+    const timer = setTimeout(() => {
+      pendingPermissions.delete(requestId);
+      resolve('deny');
+    }, PERMISSION_TIMEOUT_MS);
+
+    pendingPermissions.set(requestId, {
+      resolve: (decision) => {
+        clearTimeout(timer);
+        resolve(decision);
+      },
+      egressType,
+      proposal,
+      groupFolder,
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Tunnel helper (used by both passthrough and approved CONNECT)
+// ---------------------------------------------------------------------------
+
+function openTunnel(
+  host: string,
+  clientSocket: import('stream').Duplex,
+  head: Buffer,
+): void {
+  const [targetHost, targetPortStr] = host.split(':');
+  const targetPort = parseInt(targetPortStr ?? '443', 10);
+  const targetSocket = net.connect(targetPort, targetHost, () => {
+    clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+    if (head.length > 0) targetSocket.write(head);
+    targetSocket.pipe(clientSocket);
+    clientSocket.pipe(targetSocket);
+  });
+  targetSocket.on('error', () => {
+    clientSocket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
+    clientSocket.destroy();
+  });
+  clientSocket.on('error', () => targetSocket.destroy());
+}
+
+// ---------------------------------------------------------------------------
+// Server
+// ---------------------------------------------------------------------------
+
 export function startCredentialProxy(
   port: number,
   host = '127.0.0.1',
+  approvalCallbacks?: PermissionApprovalCallbacks,
 ): Promise<Server> {
   const secrets = readEnvFile([
     'ANTHROPIC_API_KEY',
@@ -55,12 +258,53 @@ export function startCredentialProxy(
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
 
+  function isAnthropicHost(reqHost: string): boolean {
+    return (
+      reqHost === 'api.anthropic.com' ||
+      (upstreamUrl.hostname !== '' && reqHost === upstreamUrl.hostname)
+    );
+  }
+
   return new Promise((resolve, reject) => {
-    const server = createServer((req, res) => {
+    const server = createServer(async (req, res) => {
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(c));
-      req.on('end', () => {
+      req.on('end', async () => {
         const body = Buffer.concat(chunks);
+
+        // Determine target host for permission check
+        const reqHost = (req.headers.host ?? '').split(':')[0];
+        const isAnthropicReq = isAnthropicHost(reqHost);
+
+        // Permission check for non-Anthropic HTTP traffic
+        if (!isAnthropicReq && approvalCallbacks) {
+          const group = approvalCallbacks.resolveGroup();
+          if (!group) {
+            logger.warn(
+              { url: req.url },
+              'Permission check: cannot resolve group, denying HTTP request',
+            );
+            res.writeHead(403);
+            res.end('Forbidden');
+            return;
+          }
+
+          const fullUrl = `http://${req.headers.host ?? reqHost}${req.url ?? '/'}`;
+          const decision = await checkWithApproval(
+            'http',
+            fullUrl,
+            group.groupFolder,
+            group.chatJid,
+            approvalCallbacks,
+          );
+
+          if (decision === 'deny') {
+            res.writeHead(403);
+            res.end('Forbidden');
+            return;
+          }
+        }
+
         const headers: Record<string, string | number | string[] | undefined> =
           {
             ...(req.headers as Record<string, string>),
@@ -121,6 +365,49 @@ export function startCredentialProxy(
       });
     });
 
+    // CONNECT handler for HTTPS tunneling
+    server.on('connect', async (req, clientSocket, head) => {
+      const connectHost = req.url ?? '';
+
+      // Allow Anthropic API through without permission check
+      const [connectHostname] = connectHost.split(':');
+      const isAnthropicConnect =
+        isAnthropicHost(connectHostname) ||
+        connectHostname === upstreamUrl.hostname;
+
+      if (isAnthropicConnect || !approvalCallbacks) {
+        openTunnel(connectHost, clientSocket, head);
+        return;
+      }
+
+      const group = approvalCallbacks.resolveGroup();
+      if (!group) {
+        logger.warn(
+          { host: connectHost },
+          'Permission check: cannot resolve group, denying CONNECT',
+        );
+        clientSocket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        clientSocket.destroy();
+        return;
+      }
+
+      const decision = await checkWithApproval(
+        'connect',
+        connectHost,
+        group.groupFolder,
+        group.chatJid,
+        approvalCallbacks,
+      );
+
+      if (decision === 'deny') {
+        clientSocket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        clientSocket.destroy();
+        return;
+      }
+
+      openTunnel(connectHost, clientSocket, head);
+    });
+
     server.listen(port, host, () => {
       logger.info({ port, host, authMode }, 'Credential proxy started');
       resolve(server);
@@ -134,4 +421,34 @@ export function startCredentialProxy(
 export function detectAuthMode(): AuthMode {
   const secrets = readEnvFile(['ANTHROPIC_API_KEY']);
   return secrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
+}
+
+/**
+ * Handle a permission approval response from Telegram.
+ * Called when a user taps a button on a proxy permission message.
+ * 'always' persists the rule to the DB; 'once' just allows this request.
+ */
+export function handleProxyPermissionResponse(
+  requestId: string,
+  decision: 'once' | 'always' | 'deny',
+): void {
+  const pending = pendingPermissions.get(requestId);
+
+  if (decision === 'always' && pending?.proposal) {
+    insertPermissionRule({
+      id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      egress_type: pending.egressType,
+      pattern: pending.proposal.pattern,
+      effect: 'allow',
+      scope: pending.proposal.scope,
+      group_folder:
+        pending.proposal.scope === 'group' ? pending.groupFolder : null,
+      description: pending.proposal.description,
+      source: 'telegram',
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  const resolved = decision !== 'deny' ? 'allow' : 'deny';
+  resolvePermission(requestId, resolved);
 }
