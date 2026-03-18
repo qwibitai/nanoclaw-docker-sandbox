@@ -86,6 +86,7 @@ vi.mock('child_process', async () => {
   };
 });
 
+import { spawn } from 'child_process';
 import { runContainerAgent, ContainerOutput } from './container-runner.js';
 import type { RegisteredGroup } from './types.js';
 
@@ -94,6 +95,11 @@ const testGroup: RegisteredGroup = {
   folder: 'test-group',
   trigger: '@Andy',
   added_at: new Date().toISOString(),
+};
+
+const testGroupWithPermissionApproval: RegisteredGroup = {
+  ...testGroup,
+  containerConfig: { permissionApproval: true },
 };
 
 const testInput = {
@@ -110,6 +116,49 @@ function emitOutputMarker(
   const json = JSON.stringify(output);
   proc.stdout.push(`${OUTPUT_START_MARKER}\n${json}\n${OUTPUT_END_MARKER}\n`);
 }
+
+describe('container-runner spawn args', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fakeProc = createFakeProcess();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('includes host.docker.internal in NO_PROXY when permissionApproval is true', async () => {
+    // Start the container (don't await — we just need to inspect spawn args)
+    const resultPromise = runContainerAgent(
+      testGroupWithPermissionApproval,
+      { ...testInput, permissionApproval: true },
+      () => {},
+    );
+
+    // Immediately emit output so the container "finishes"
+    emitOutputMarker(fakeProc, { status: 'success', result: 'ok', newSessionId: 's1' });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    const spawnMock = vi.mocked(spawn);
+    expect(spawnMock).toHaveBeenCalled();
+    const spawnArgs: string[] = spawnMock.mock.calls[0][1] as string[];
+
+    // Find the NO_PROXY value passed to the container
+    const noProxyIdx = spawnArgs.findIndex((a) => a === '-e') + 1;
+    const noProxyArgs = spawnArgs
+      .map((a, i) => (spawnArgs[i - 1] === '-e' ? a : null))
+      .filter(Boolean)
+      .filter((a) => a!.startsWith('NO_PROXY=') || a!.startsWith('no_proxy='));
+
+    expect(noProxyArgs.length).toBeGreaterThan(0);
+    for (const arg of noProxyArgs) {
+      expect(arg).toContain('host.docker.internal');
+    }
+  });
+});
 
 describe('container-runner timeout behavior', () => {
   beforeEach(() => {

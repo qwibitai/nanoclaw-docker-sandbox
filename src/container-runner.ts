@@ -317,8 +317,8 @@ function buildContainerArgs(
     args.push('-e', `HTTPS_PROXY=${proxyUrl}`);
     args.push('-e', `http_proxy=${proxyUrl}`);
     args.push('-e', `https_proxy=${proxyUrl}`);
-    args.push('-e', `NO_PROXY=localhost,127.0.0.1`);
-    args.push('-e', `no_proxy=localhost,127.0.0.1`);
+    args.push('-e', `NO_PROXY=localhost,127.0.0.1,host.docker.internal`);
+    args.push('-e', `no_proxy=localhost,127.0.0.1,host.docker.internal`);
   }
 
   // Mirror the host's auth method with a placeholder value.
