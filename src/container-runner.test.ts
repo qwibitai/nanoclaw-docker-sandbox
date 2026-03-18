@@ -168,16 +168,13 @@ describe('container-runner spawn args', () => {
     expect(env['no_proxy']).toContain('host.docker.internal');
   });
 
-  it('sets HTTP_PROXY and HTTPS_PROXY to bridge IP when permissionApproval is true', async () => {
+  it('sets HTTP_PROXY and HTTPS_PROXY to credential proxy URL when permissionApproval is true', async () => {
     const args = await spawnArgsFor(testGroupWithPermissionApproval);
     const env = envArgs(args);
-    // Must use the actual bridge IP (172.20.0.1) so --internal network isolation works.
-    // host.docker.internal resolves to the VM gateway on macOS which is outside
-    // the bridge subnet and unreachable on --internal networks.
-    expect(env['HTTP_PROXY']).toBe('http://172.20.0.1:3001');
-    expect(env['HTTPS_PROXY']).toBe('http://172.20.0.1:3001');
-    expect(env['http_proxy']).toBe('http://172.20.0.1:3001');
-    expect(env['https_proxy']).toBe('http://172.20.0.1:3001');
+    expect(env['HTTP_PROXY']).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
+    expect(env['HTTPS_PROXY']).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
+    expect(env['http_proxy']).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
+    expect(env['https_proxy']).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
   });
 
   it('attaches nanoclaw-proxy network when permissionApproval is true', async () => {
@@ -187,29 +184,25 @@ describe('container-runner spawn args', () => {
     expect(args[networkIdx + 1]).toBe('nanoclaw-proxy');
   });
 
-  it('injects bridge gateway IP as host.docker.internal so --internal network can reach the proxy', async () => {
-    const args = await spawnArgsFor(testGroupWithPermissionApproval);
-    const addHostIdx = args.indexOf('--add-host');
-    expect(addHostIdx).not.toBe(-1);
-    // Must be the actual IP (172.20.0.1), not the 'host-gateway' Docker alias.
-    // host-gateway on macOS resolves to the VM host IP which is outside the bridge
-    // subnet and unreachable when the network uses --internal.
-    expect(args[addHostIdx + 1]).toBe('host.docker.internal:172.20.0.1');
-  });
-
-  it('falls back to host-gateway for --add-host when bridge IP lookup fails', async () => {
-    vi.mocked(execSync).mockImplementation((cmd: string) => {
-      if (cmd.includes('network inspect')) throw new Error('network not found');
-      return '';
-    });
-    // Reset cache so the failed lookup is used
-    const { _resetProxyBridgeIpCache } = await import('./container-runtime.js');
-    _resetProxyBridgeIpCache();
-
+  it('adds host.docker.internal host entry when permissionApproval is true', async () => {
     const args = await spawnArgsFor(testGroupWithPermissionApproval);
     const addHostIdx = args.indexOf('--add-host');
     expect(addHostIdx).not.toBe(-1);
     expect(args[addHostIdx + 1]).toBe('host.docker.internal:host-gateway');
+  });
+
+  it('drops all capabilities and disables privilege escalation when permissionApproval is true', async () => {
+    const args = await spawnArgsFor(testGroupWithPermissionApproval);
+    const capDropIdx = args.indexOf('--cap-drop');
+    expect(capDropIdx).not.toBe(-1);
+    expect(args[capDropIdx + 1]).toBe('ALL');
+    expect(args).toContain('no-new-privileges');
+  });
+
+  it('does not drop capabilities when permissionApproval is false', async () => {
+    const args = await spawnArgsFor(testGroup);
+    expect(args).not.toContain('--cap-drop');
+    expect(args).not.toContain('no-new-privileges');
   });
 
   it('does not set proxy env vars when permissionApproval is false', async () => {

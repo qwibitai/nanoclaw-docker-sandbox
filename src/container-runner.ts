@@ -247,6 +247,16 @@ function buildContainerArgs(
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
+  // Drop all Linux capabilities and prevent privilege escalation.
+  // --cap-drop ALL removes CAP_NET_RAW (raw sockets) and CAP_NET_ADMIN (routing
+  // changes), which are the primitives needed to bypass HTTP_PROXY at the network
+  // layer. Standard TCP connections (which honour proxy env vars) don't need caps.
+  // --security-opt no-new-privileges blocks setuid/setgid escalation paths.
+  if (permissionApproval) {
+    args.push('--cap-drop', 'ALL');
+    args.push('--security-opt', 'no-new-privileges');
+  }
+
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
 
@@ -305,24 +315,24 @@ function buildContainerArgs(
     `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
   );
 
-  // Permission approval: use nanoclaw-proxy bridge (--internal) + route all
-  // HTTP/HTTPS through the credential proxy. The --internal flag prevents any
-  // direct internet access; the only exit is through the proxy.
+  // Permission approval: attach to the nanoclaw-proxy bridge and route all
+  // HTTP/HTTPS through the credential proxy.
   //
-  // Key: use the bridge gateway IP (e.g. 172.20.0.1) rather than
-  // 'host.docker.internal' or 'host-gateway' for --add-host and proxy URLs.
-  // On macOS Docker Desktop, 'host-gateway' resolves to the VM host IP
-  // (192.168.65.254 or an IPv6 address) which is *outside* the bridge subnet
-  // and unreachable on --internal networks. The bridge gateway IS within the
-  // subnet and always reachable. Falls back to host-gateway if the network
-  // doesn't exist yet (e.g. before setup-proxy-network.sh has been run).
+  // Network isolation strategy is platform-specific (see scripts/):
+  //   macOS: iptables rules injected into the Docker Desktop VM via a
+  //          privileged container block FORWARD chain traffic from this bridge
+  //          to the internet, while preserving the host.docker.internal tunnel
+  //          (which Docker Desktop handles outside iptables).
+  //   Linux: the nanoclaw-proxy network uses --internal, so no default route
+  //          exists outside the bridge subnet.
+  //
+  // 'host-gateway' resolves to the host IP as seen by the Docker runtime
+  // (on macOS: the Mac host via Docker Desktop's tunnel; on Linux: the bridge
+  // gateway). This makes host.docker.internal reachable on both platforms.
   if (permissionApproval) {
     args.push('--network', 'nanoclaw-proxy');
-    const bridgeIp = getProxyBridgeIp();
-    const addHostValue = bridgeIp ?? 'host-gateway';
-    args.push('--add-host', `host.docker.internal:${addHostValue}`);
-    const proxyHost = bridgeIp ?? CONTAINER_HOST_GATEWAY;
-    const proxyUrl = `http://${proxyHost}:${CREDENTIAL_PROXY_PORT}`;
+    args.push('--add-host', 'host.docker.internal:host-gateway');
+    const proxyUrl = `http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`;
     args.push('-e', `HTTP_PROXY=${proxyUrl}`);
     args.push('-e', `HTTPS_PROXY=${proxyUrl}`);
     args.push('-e', `http_proxy=${proxyUrl}`);

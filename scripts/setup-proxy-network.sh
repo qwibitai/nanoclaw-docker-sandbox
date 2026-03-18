@@ -26,7 +26,6 @@ fi
 
 docker network create \
   --driver bridge \
-  --internal \
   --opt com.docker.network.bridge.name=nanoclaw-proxy \
   "$NETWORK_NAME"
 
