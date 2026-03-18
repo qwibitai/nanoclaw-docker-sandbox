@@ -92,7 +92,7 @@ describe('GroupQueue', () => {
     expect(activeCount).toBe(2);
 
     // Complete one — third should start
-    completionCallbacks[0]();
+    completionCallbacks[0]?.();
     await vi.advanceTimersByTimeAsync(10);
 
     expect(processMessages).toHaveBeenCalledTimes(3);
@@ -201,7 +201,7 @@ describe('GroupQueue', () => {
     // Retry 1: 5000ms, Retry 2: 10000ms, Retry 3: 20000ms, Retry 4: 40000ms, Retry 5: 80000ms
     const retryDelays = [5000, 10000, 20000, 40000, 80000];
     for (let i = 0; i < retryDelays.length; i++) {
-      await vi.advanceTimersByTimeAsync(retryDelays[i] + 10);
+      await vi.advanceTimersByTimeAsync((retryDelays[i] ?? 0) + 10);
       expect(callCount).toBe(i + 2);
     }
 
@@ -237,7 +237,7 @@ describe('GroupQueue', () => {
     expect(processed).toEqual(['group1@g.us', 'group2@g.us']);
 
     // Free up a slot
-    completionCallbacks[0]();
+    completionCallbacks[0]?.();
     await vi.advanceTimersByTimeAsync(10);
 
     expect(processed).toContain('group3@g.us');

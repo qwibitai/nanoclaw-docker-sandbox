@@ -55,7 +55,7 @@ export function hostGatewayArgs(): string[] {
 // Proxy bridge IP (for --internal network isolation)
 // ---------------------------------------------------------------------------
 
-let _cachedBridgeIp: string | null | undefined = undefined; // undefined = not yet fetched
+let _cachedBridgeIp: string | null | undefined; // undefined = not yet fetched
 
 /**
  * Returns the gateway IP of the nanoclaw-proxy Docker bridge network.

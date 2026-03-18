@@ -278,7 +278,7 @@ export function startCredentialProxy(
         // Direct requests (URL starts with '/') are always Anthropic API calls
         // routed via ANTHROPIC_BASE_URL — never subject to permission checks.
         // HTTP proxy requests (absolute URL) may be external traffic to gate.
-        const reqHost = (req.headers.host ?? '').split(':')[0];
+        const reqHost = (req.headers.host ?? '').split(':')[0] ?? '';
         const isDirectApiRequest = (req.url ?? '').startsWith('/');
         const isAnthropicReq = isDirectApiRequest || isAnthropicHost(reqHost);
 
@@ -378,7 +378,7 @@ export function startCredentialProxy(
       const connectHost = req.url ?? '';
 
       // Allow Anthropic API through without permission check
-      const [connectHostname] = connectHost.split(':');
+      const connectHostname = connectHost.split(':')[0] ?? '';
       const isAnthropicConnect =
         isAnthropicHost(connectHostname) ||
         connectHostname === upstreamUrl.hostname;

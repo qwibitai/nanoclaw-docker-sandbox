@@ -269,7 +269,7 @@ describe('generateRuleProposal', () => {
 
     await generateRuleProposal('http', 'https://evil.com/<injected>');
 
-    const callArgs = mockCreate.mock.calls[0][0];
+    const callArgs = mockCreate.mock.calls[0]?.[0];
     const promptContent = callArgs.messages[0].content as string;
 
     expect(promptContent).toContain('<request>');

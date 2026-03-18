@@ -72,7 +72,9 @@ export class TelegramChannel implements Channel {
       const chatName =
         chatType === 'private'
           ? ctx.from?.first_name || 'Private'
-          : 'title' in ctx.chat ? ctx.chat.title : 'Unknown';
+          : 'title' in ctx.chat
+            ? ctx.chat.title
+            : 'Unknown';
 
       ctx.reply(
         `Chat ID: \`tg:${chatId}\`\nName: ${chatName}\nType: ${chatType}`,
@@ -104,7 +106,9 @@ export class TelegramChannel implements Channel {
       const chatName =
         ctx.chat.type === 'private'
           ? senderName
-          : 'title' in ctx.chat ? ctx.chat.title : chatJid;
+          : 'title' in ctx.chat
+            ? ctx.chat.title
+            : chatJid;
 
       // Translate Telegram @bot_username mentions into TRIGGER_PATTERN format.
       // Telegram @mentions (e.g., @andy_ai_bot) won't match TRIGGER_PATTERN
@@ -172,6 +176,7 @@ export class TelegramChannel implements Channel {
       if (!match) return;
 
       const [, action, requestId] = match;
+      if (!action || !requestId) return;
       const chatJid = `tg:${ctx.chat?.id ?? ctx.callbackQuery.message?.chat.id}`;
       const group = this.opts.registeredGroups()[chatJid];
 
@@ -202,7 +207,10 @@ export class TelegramChannel implements Channel {
     });
 
     // Handle non-text messages with placeholders so the agent knows something was sent
-    const storeNonText = (ctx: Filter<Context, 'message'>, placeholder: string) => {
+    const storeNonText = (
+      ctx: Filter<Context, 'message'>,
+      placeholder: string,
+    ) => {
       const chatJid = `tg:${ctx.chat.id}`;
       const group = this.opts.registeredGroups()[chatJid];
       if (!group) return;

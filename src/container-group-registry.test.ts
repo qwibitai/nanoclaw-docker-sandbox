@@ -51,10 +51,22 @@ describe('resolveContainerGroup', () => {
   });
 
   it('multiple groups can be registered simultaneously', () => {
-    registerContainerGroup('172.19.0.2', { groupFolder: 'group-a', chatJid: 'tg:1' });
-    registerContainerGroup('172.19.0.3', { groupFolder: 'group-b', chatJid: 'tg:2' });
+    registerContainerGroup('172.19.0.2', {
+      groupFolder: 'group-a',
+      chatJid: 'tg:1',
+    });
+    registerContainerGroup('172.19.0.3', {
+      groupFolder: 'group-b',
+      chatJid: 'tg:2',
+    });
 
-    expect(resolveContainerGroup('172.19.0.2')).toEqual({ groupFolder: 'group-a', chatJid: 'tg:1' });
-    expect(resolveContainerGroup('172.19.0.3')).toEqual({ groupFolder: 'group-b', chatJid: 'tg:2' });
+    expect(resolveContainerGroup('172.19.0.2')).toEqual({
+      groupFolder: 'group-a',
+      chatJid: 'tg:1',
+    });
+    expect(resolveContainerGroup('172.19.0.3')).toEqual({
+      groupFolder: 'group-b',
+      chatJid: 'tg:2',
+    });
   });
 });

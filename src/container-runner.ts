@@ -2,7 +2,7 @@
  * Container Runner for NanoClaw
  * Spawns agent execution in containers and handles IPC
  */
-import { ChildProcess, exec, spawn } from 'child_process';
+import { type ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -31,7 +31,7 @@ import {
 } from './container-group-registry.js';
 import { detectAuthMode } from './credential-proxy.js';
 import { validateAdditionalMounts } from './mount-security.js';
-import { RegisteredGroup } from './types.js';
+import type { RegisteredGroup } from './types.js';
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -381,7 +381,9 @@ function buildContainerArgs(
   return args;
 }
 
-async function getContainerNetworkIp(containerName: string): Promise<string | null> {
+async function getContainerNetworkIp(
+  containerName: string,
+): Promise<string | null> {
   const cmd = `${CONTAINER_RUNTIME_BIN} inspect --format '{{(index .NetworkSettings.Networks "nanoclaw-proxy").IPAddress}}' ${containerName}`;
   for (let attempt = 0; attempt < 5; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
@@ -744,7 +746,7 @@ export async function runContainerAgent(
         } else {
           // Fallback: last non-empty line (backwards compatibility)
           const lines = stdout.trim().split('\n');
-          jsonLine = lines[lines.length - 1];
+          jsonLine = lines[lines.length - 1] ?? '';
         }
 
         const output: ContainerOutput = JSON.parse(jsonLine);

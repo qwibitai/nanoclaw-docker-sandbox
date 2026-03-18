@@ -184,7 +184,7 @@ describe('checkPermissionRule', () => {
     // Only one row should exist
     expect(rules).toHaveLength(1);
     // match_count incremented by duplicate insert
-    expect(rules[0].match_count).toBe(1);
+    expect(rules[0]?.match_count).toBe(1);
   });
 });
 

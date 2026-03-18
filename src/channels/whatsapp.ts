@@ -39,7 +39,7 @@ function fetchVersionViaProxy(): Promise<[number, number, number] | undefined> {
         res.on('end', () => {
           const match = data.match(/client_revision[^0-9]*(\d+)/);
           if (match) {
-            resolve([2, 3000, parseInt(match[1], 10)]);
+            resolve([2, 3000, parseInt(match[1] ?? '0', 10)]);
           } else {
             resolve(undefined);
           }
@@ -263,7 +263,7 @@ export class WhatsAppChannel implements Channel {
             if (!content) continue;
 
             const sender = msg.key.participant || msg.key.remoteJid || '';
-            const senderName = msg.pushName || sender.split('@')[0];
+            const senderName = msg.pushName || sender.split('@')[0] || sender;
 
             const fromMe = msg.key.fromMe || false;
             // Detect bot messages: with own number, fromMe is reliable
@@ -390,7 +390,7 @@ export class WhatsAppChannel implements Channel {
 
   private async translateJid(jid: string): Promise<string> {
     if (!jid.endsWith('@lid')) return jid;
-    const lidUser = jid.split('@')[0].split(':')[0];
+    const lidUser = (jid.split('@')[0] ?? '').split(':')[0] ?? '';
 
     // Check local cache first
     const cached = this.lidToPhoneMap[lidUser];
@@ -406,7 +406,7 @@ export class WhatsAppChannel implements Channel {
     try {
       const pn = await this.sock.signalRepository?.lidMapping?.getPNForLID(jid);
       if (pn) {
-        const phoneJid = `${pn.split('@')[0].split(':')[0]}@s.whatsapp.net`;
+        const phoneJid = `${(pn.split('@')[0] ?? '').split(':')[0] ?? ''}@s.whatsapp.net`;
         this.lidToPhoneMap[lidUser] = phoneJid;
         logger.info(
           { lidJid: jid, phoneJid },

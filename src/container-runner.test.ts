@@ -80,9 +80,14 @@ vi.mock('child_process', () => ({
       cb?: (err: Error | null, stdout: string, stderr: string) => void,
     ) => {
       // exec(cmd, callback) or exec(cmd, opts, callback)
-      const callback = typeof optsOrCb === 'function'
-        ? (optsOrCb as (err: Error | null, stdout: string, stderr: string) => void)
-        : cb;
+      const callback =
+        typeof optsOrCb === 'function'
+          ? (optsOrCb as (
+              err: Error | null,
+              stdout: string,
+              stderr: string,
+            ) => void)
+          : cb;
       if (callback) {
         // Return a fake IP for docker inspect calls
         const stdout = cmd.includes('inspect') ? '172.19.0.2\n' : '';
@@ -102,7 +107,7 @@ vi.mock('./container-group-registry.js', () => ({
 }));
 
 import { spawn, execSync } from 'child_process';
-import { runContainerAgent, ContainerOutput } from './container-runner.js';
+import { runContainerAgent, type ContainerOutput } from './container-runner.js';
 import {
   registerContainerGroup,
   deregisterContainerGroup,
@@ -159,17 +164,18 @@ describe('container-runner spawn args', () => {
     fakeProc.emit('close', 0);
     await vi.advanceTimersByTimeAsync(10);
     await resultPromise;
-    return vi.mocked(spawn).mock.calls[0][1] as string[];
+    return [...(vi.mocked(spawn).mock.calls[0]?.[1] ?? [])];
   }
 
   /** Pull all `-e KEY=VALUE` entries from spawn args. */
   function envArgs(args: string[]): Record<string, string> {
     const result: Record<string, string> = {};
     for (let i = 0; i < args.length - 1; i++) {
-      if (args[i] === '-e') {
-        const eq = args[i + 1].indexOf('=');
+      const nextArg = args[i + 1];
+      if (args[i] === '-e' && nextArg !== undefined) {
+        const eq = nextArg.indexOf('=');
         if (eq !== -1) {
-          result[args[i + 1].slice(0, eq)] = args[i + 1].slice(eq + 1);
+          result[nextArg.slice(0, eq)] = nextArg.slice(eq + 1);
         }
       }
     }

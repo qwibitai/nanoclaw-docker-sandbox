@@ -8,8 +8,8 @@ import {
   getTaskById,
   setRegisteredGroup,
 } from './db.js';
-import { processTaskIpc, IpcDeps } from './ipc.js';
-import { RegisteredGroup } from './types.js';
+import { processTaskIpc, type IpcDeps } from './ipc.js';
+import type { RegisteredGroup } from './types.js';
 
 // Set up registered groups used across tests
 const MAIN_GROUP: RegisteredGroup = {
@@ -85,7 +85,7 @@ describe('schedule_task authorization', () => {
     // Verify task was created in DB for the other group
     const allTasks = getAllTasks();
     expect(allTasks.length).toBe(1);
-    expect(allTasks[0].group_folder).toBe('other-group');
+    expect(allTasks[0]?.group_folder).toBe('other-group');
   });
 
   it('non-main group can schedule for itself', async () => {
@@ -104,7 +104,7 @@ describe('schedule_task authorization', () => {
 
     const allTasks = getAllTasks();
     expect(allTasks.length).toBe(1);
-    expect(allTasks[0].group_folder).toBe('other-group');
+    expect(allTasks[0]?.group_folder).toBe('other-group');
   });
 
   it('non-main group cannot schedule for another group', async () => {
@@ -454,10 +454,10 @@ describe('schedule_task schedule types', () => {
 
     const tasks = getAllTasks();
     expect(tasks).toHaveLength(1);
-    expect(tasks[0].schedule_type).toBe('cron');
-    expect(tasks[0].next_run).toBeTruthy();
+    expect(tasks[0]?.schedule_type).toBe('cron');
+    expect(tasks[0]?.next_run).toBeTruthy();
     // next_run should be a valid ISO date in the future
-    expect(new Date(tasks[0].next_run!).getTime()).toBeGreaterThan(
+    expect(new Date(tasks[0]?.next_run ?? '').getTime()).toBeGreaterThan(
       Date.now() - 60000,
     );
   });
@@ -497,9 +497,9 @@ describe('schedule_task schedule types', () => {
 
     const tasks = getAllTasks();
     expect(tasks).toHaveLength(1);
-    expect(tasks[0].schedule_type).toBe('interval');
+    expect(tasks[0]?.schedule_type).toBe('interval');
     // next_run should be ~1 hour from now
-    const nextRun = new Date(tasks[0].next_run!).getTime();
+    const nextRun = new Date(tasks[0]?.next_run ?? '').getTime();
     expect(nextRun).toBeGreaterThanOrEqual(before + 3600000 - 1000);
     expect(nextRun).toBeLessThanOrEqual(Date.now() + 3600000 + 1000);
   });
@@ -575,7 +575,7 @@ describe('schedule_task context_mode', () => {
     );
 
     const tasks = getAllTasks();
-    expect(tasks[0].context_mode).toBe('group');
+    expect(tasks[0]?.context_mode).toBe('group');
   });
 
   it('accepts context_mode=isolated', async () => {
@@ -594,7 +594,7 @@ describe('schedule_task context_mode', () => {
     );
 
     const tasks = getAllTasks();
-    expect(tasks[0].context_mode).toBe('isolated');
+    expect(tasks[0]?.context_mode).toBe('isolated');
   });
 
   it('defaults invalid context_mode to isolated', async () => {
@@ -613,7 +613,7 @@ describe('schedule_task context_mode', () => {
     );
 
     const tasks = getAllTasks();
-    expect(tasks[0].context_mode).toBe('isolated');
+    expect(tasks[0]?.context_mode).toBe('isolated');
   });
 
   it('defaults missing context_mode to isolated', async () => {
@@ -631,7 +631,7 @@ describe('schedule_task context_mode', () => {
     );
 
     const tasks = getAllTasks();
-    expect(tasks[0].context_mode).toBe('isolated');
+    expect(tasks[0]?.context_mode).toBe('isolated');
   });
 });
 

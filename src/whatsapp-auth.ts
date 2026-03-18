@@ -47,7 +47,7 @@ function fetchVersionViaProxy(): Promise<[number, number, number] | undefined> {
         res.on('end', () => {
           const match = data.match(/client_revision[^0-9]*(\d+)/);
           if (match) {
-            resolve([2, 3000, parseInt(match[1], 10)]);
+            resolve([2, 3000, parseInt(match[1] ?? '0', 10)]);
           } else {
             resolve(undefined);
           }
@@ -101,9 +101,13 @@ function askQuestion(prompt: string): Promise<string> {
 /** Extract Baileys disconnect status code from an opaque error object. */
 function getBaileysStatusCode(error: unknown): number | undefined {
   if (error === null || typeof error !== 'object') return undefined;
-  const output = Object.hasOwn(error, 'output') ? (error as Record<string, unknown>).output : undefined;
+  const output = Object.hasOwn(error, 'output')
+    ? (error as Record<string, unknown>).output
+    : undefined;
   if (output === null || typeof output !== 'object') return undefined;
-  const statusCode = Object.hasOwn(output, 'statusCode') ? (output as Record<string, unknown>).statusCode : undefined;
+  const statusCode = Object.hasOwn(output, 'statusCode')
+    ? (output as Record<string, unknown>).statusCode
+    : undefined;
   return typeof statusCode === 'number' ? statusCode : undefined;
 }
 
@@ -149,7 +153,10 @@ async function connectSocket(
         console.log(`  4. Enter this code: ${code}\n`);
         fs.writeFileSync(STATUS_FILE, `pairing_code:${code}`);
       } catch (err) {
-        console.error('Failed to request pairing code:', err instanceof Error ? err.message : err);
+        console.error(
+          'Failed to request pairing code:',
+          err instanceof Error ? err.message : err,
+        );
         process.exit(1);
       }
     }, 3000);

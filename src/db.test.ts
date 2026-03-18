@@ -61,10 +61,10 @@ describe('storeMessage', () => {
       'Andy',
     );
     expect(messages).toHaveLength(1);
-    expect(messages[0].id).toBe('msg-1');
-    expect(messages[0].sender).toBe('123@s.whatsapp.net');
-    expect(messages[0].sender_name).toBe('Alice');
-    expect(messages[0].content).toBe('hello world');
+    expect(messages[0]?.id).toBe('msg-1');
+    expect(messages[0]?.sender).toBe('123@s.whatsapp.net');
+    expect(messages[0]?.sender_name).toBe('Alice');
+    expect(messages[0]?.content).toBe('hello world');
   });
 
   it('filters out empty content', () => {
@@ -136,7 +136,7 @@ describe('storeMessage', () => {
       'Andy',
     );
     expect(messages).toHaveLength(1);
-    expect(messages[0].content).toBe('updated');
+    expect(messages[0]?.content).toBe('updated');
   });
 });
 
@@ -189,7 +189,7 @@ describe('getMessagesSince', () => {
     );
     // Should exclude m1, m2 (before/at timestamp), m3 (bot message)
     expect(msgs).toHaveLength(1);
-    expect(msgs[0].content).toBe('third');
+    expect(msgs[0]?.content).toBe('third');
   });
 
   it('excludes bot messages via is_bot_message flag', () => {
@@ -288,7 +288,7 @@ describe('getNewMessages', () => {
     );
     // Only g1 msg2 (after ts, not bot)
     expect(messages).toHaveLength(1);
-    expect(messages[0].content).toBe('g1 msg2');
+    expect(messages[0]?.content).toBe('g1 msg2');
   });
 
   it('returns empty for no registered groups', () => {
@@ -305,14 +305,14 @@ describe('storeChatMetadata', () => {
     storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
     const chats = getAllChats();
     expect(chats).toHaveLength(1);
-    expect(chats[0].jid).toBe('group@g.us');
-    expect(chats[0].name).toBe('group@g.us');
+    expect(chats[0]?.jid).toBe('group@g.us');
+    expect(chats[0]?.name).toBe('group@g.us');
   });
 
   it('stores chat with explicit name', () => {
     storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z', 'My Group');
     const chats = getAllChats();
-    expect(chats[0].name).toBe('My Group');
+    expect(chats[0]?.name).toBe('My Group');
   });
 
   it('updates name on subsequent call with name', () => {
@@ -320,14 +320,14 @@ describe('storeChatMetadata', () => {
     storeChatMetadata('group@g.us', '2024-01-01T00:00:01.000Z', 'Updated Name');
     const chats = getAllChats();
     expect(chats).toHaveLength(1);
-    expect(chats[0].name).toBe('Updated Name');
+    expect(chats[0]?.name).toBe('Updated Name');
   });
 
   it('preserves newer timestamp on conflict', () => {
     storeChatMetadata('group@g.us', '2024-01-01T00:00:05.000Z');
     storeChatMetadata('group@g.us', '2024-01-01T00:00:01.000Z');
     const chats = getAllChats();
-    expect(chats[0].last_message_time).toBe('2024-01-01T00:00:05.000Z');
+    expect(chats[0]?.last_message_time).toBe('2024-01-01T00:00:05.000Z');
   });
 });
 
@@ -417,10 +417,10 @@ describe('message query LIMIT', () => {
       3,
     );
     expect(messages).toHaveLength(3);
-    expect(messages[0].content).toBe('message 8');
-    expect(messages[2].content).toBe('message 10');
+    expect(messages[0]?.content).toBe('message 8');
+    expect(messages[2]?.content).toBe('message 10');
     // Chronological order preserved
-    expect(messages[1].timestamp > messages[0].timestamp).toBe(true);
+    expect((messages[1]?.timestamp ?? '') > (messages[0]?.timestamp ?? '')).toBe(true);
     // newTimestamp reflects latest returned row
     expect(newTimestamp).toBe('2024-01-01T00:00:10.000Z');
   });
@@ -433,9 +433,9 @@ describe('message query LIMIT', () => {
       3,
     );
     expect(messages).toHaveLength(3);
-    expect(messages[0].content).toBe('message 8');
-    expect(messages[2].content).toBe('message 10');
-    expect(messages[1].timestamp > messages[0].timestamp).toBe(true);
+    expect(messages[0]?.content).toBe('message 8');
+    expect(messages[2]?.content).toBe('message 10');
+    expect((messages[1]?.timestamp ?? '') > (messages[0]?.timestamp ?? '')).toBe(true);
   });
 
   it('returns all messages when count is under the limit', () => {
@@ -464,8 +464,8 @@ describe('registered group isMain', () => {
     const groups = getAllRegisteredGroups();
     const group = groups['main@s.whatsapp.net'];
     expect(group).toBeDefined();
-    expect(group.isMain).toBe(true);
-    expect(group.folder).toBe('whatsapp_main');
+    expect(group?.isMain).toBe(true);
+    expect(group?.folder).toBe('whatsapp_main');
   });
 
   it('omits isMain for non-main groups', () => {
@@ -479,6 +479,6 @@ describe('registered group isMain', () => {
     const groups = getAllRegisteredGroups();
     const group = groups['group@g.us'];
     expect(group).toBeDefined();
-    expect(group.isMain).toBeUndefined();
+    expect(group?.isMain).toBeUndefined();
   });
 });

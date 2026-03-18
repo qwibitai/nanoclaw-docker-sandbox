@@ -12,7 +12,7 @@ import path from 'path';
 import pino from 'pino';
 
 import { MOUNT_ALLOWLIST_PATH } from './config.js';
-import { AdditionalMount, AllowedRoot, MountAllowlist } from './types.js';
+import type { AdditionalMount, AllowedRoot, MountAllowlist } from './types.js';
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',

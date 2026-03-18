@@ -1,4 +1,4 @@
-import { ChildProcess } from 'child_process';
+import type { ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -271,7 +271,7 @@ export class GroupQueue {
       return;
     }
 
-    const delayMs = BASE_RETRY_MS * Math.pow(2, state.retryCount - 1);
+    const delayMs = BASE_RETRY_MS * 2 ** (state.retryCount - 1);
     logger.info(
       { groupJid, retryCount: state.retryCount, delayMs },
       'Scheduling retry with backoff',
