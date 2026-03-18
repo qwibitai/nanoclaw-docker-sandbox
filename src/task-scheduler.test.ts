@@ -1,4 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { vi } from 'vitest';
+
+vi.mock('./container-runner.js', () => ({
+  runContainerAgent: vi.fn(),
+  writeTasksSnapshot: vi.fn(),
+}));
+
+vi.mock('./group-folder.js', () => ({
+  resolveGroupFolderPath: vi.fn((folder: string) => {
+    if (folder.startsWith('..')) throw new Error(`Invalid path: ${folder}`);
+    return `/tmp/claude/test-groups/${folder}`;
+  }),
+}));
+
+vi.mock('./logger.js', () => ({
+  logger: { info: vi.fn(), error: vi.fn(), debug: vi.fn(), warn: vi.fn() },
+}));
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { _initTestDatabase, createTask, getTaskById } from './db.js';
 import {
@@ -129,5 +147,112 @@ describe('task scheduler', () => {
     const nextRunTime = new Date(nextRun!).getTime();
     const offset = (nextRunTime - new Date(scheduledTime).getTime()) % ms;
     expect(offset).toBe(0);
+  });
+
+  it('computeNextRun returns a future ISO string for cron tasks', () => {
+    const task = {
+      id: 'cron-test',
+      group_folder: 'test',
+      chat_jid: 'test@g.us',
+      prompt: 'test',
+      schedule_type: 'cron' as const,
+      schedule_value: '0 * * * *', // every hour on the hour
+      context_mode: 'isolated' as const,
+      next_run: new Date().toISOString(),
+      last_run: null,
+      last_result: null,
+      status: 'active' as const,
+      created_at: '2026-01-01T00:00:00.000Z',
+    };
+
+    const nextRun = computeNextRun(task);
+    expect(nextRun).not.toBeNull();
+    // biome-ignore lint/style/noNonNullAssertion: guarded by not.toBeNull()
+    expect(new Date(nextRun!).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('runTask does not call runContainerAgent when group is not registered', async () => {
+    const { runContainerAgent } = await import('./container-runner.js');
+
+    createTask({
+      id: 'task-no-group',
+      group_folder: 'missing-group',
+      chat_jid: 'missing@g.us',
+      prompt: 'run',
+      schedule_type: 'once',
+      schedule_value: '2026-01-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: new Date(Date.now() - 1000).toISOString(),
+      status: 'active',
+      created_at: '2026-01-01T00:00:00.000Z',
+    });
+
+    const enqueueTask = vi.fn(
+      (_jid: string, _id: string, fn: () => Promise<void>) => {
+        void fn();
+      },
+    );
+
+    startSchedulerLoop({
+      registeredGroups: () => ({}),
+      getSessions: () => ({}),
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+      queue: { enqueueTask, closeStdin: vi.fn(), notifyIdle: vi.fn() } as any,
+      onProcess: () => {},
+      sendMessage: async () => {},
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(vi.mocked(runContainerAgent)).not.toHaveBeenCalled();
+  });
+
+  it('runTask calls runContainerAgent when group is registered', async () => {
+    const { runContainerAgent } = await import('./container-runner.js');
+    vi.mocked(runContainerAgent).mockResolvedValueOnce({
+      status: 'success' as const,
+      result: 'done',
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock
+    } as any);
+
+    createTask({
+      id: 'task-registered',
+      group_folder: 'my-group',
+      chat_jid: 'my@g.us',
+      prompt: 'run it',
+      schedule_type: 'once',
+      schedule_value: '2026-01-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: new Date(Date.now() - 1000).toISOString(),
+      status: 'active',
+      created_at: '2026-01-01T00:00:00.000Z',
+    });
+
+    const enqueueTask = vi.fn(
+      (_jid: string, _id: string, fn: () => Promise<void>) => {
+        void fn();
+      },
+    );
+
+    startSchedulerLoop({
+      registeredGroups: () => ({
+        'my@g.us': {
+          name: 'My Group',
+          folder: 'my-group',
+          trigger: 'always',
+          added_at: '2026-01-01T00:00:00.000Z',
+          isMain: false,
+        },
+      }),
+      getSessions: () => ({}),
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+      queue: { enqueueTask, closeStdin: vi.fn(), notifyIdle: vi.fn() } as any,
+      onProcess: () => {},
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(vi.mocked(runContainerAgent)).toHaveBeenCalledOnce();
   });
 });
