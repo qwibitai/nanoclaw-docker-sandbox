@@ -1,37 +1,19 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-// vi.hoisted runs before vi.mock factories — use it to share values into the factory
-// Must use require() here because ES module imports are not yet initialized at hoist time
-const { tmpDir, allowlistPath } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nodePath = require('node:path') as typeof import('node:path');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nodeOs = require('node:os') as typeof import('node:os');
-  const dir = nodePath.join(nodeOs.tmpdir(), `mount-sec-test-${process.pid}`);
-  return {
-    tmpDir: dir,
-    allowlistPath: nodePath.join(dir, 'mount-allowlist.json'),
-  };
-});
-
-vi.mock('./config.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./config.js')>();
-  return { ...actual, MOUNT_ALLOWLIST_PATH: allowlistPath };
-});
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  _resetMountCacheForTests,
   generateAllowlistTemplate,
   loadMountAllowlist,
   validateAdditionalMounts,
   validateMount,
 } from './mount-security.js';
 
+const tmpDir = path.join(os.tmpdir(), `mount-sec-test-${process.pid}`);
+const allowlistPath = path.join(tmpDir, 'mount-allowlist.json');
+
 beforeEach(() => {
-  _resetMountCacheForTests();
   fs.mkdirSync(tmpDir, { recursive: true });
 });
 
@@ -45,33 +27,27 @@ function writeAllowlist(content: object): void {
 
 describe('loadMountAllowlist', () => {
   it('returns null when file does not exist', () => {
-    expect(loadMountAllowlist()).toBeNull();
-  });
-
-  it('caches the failure — returns null even after file is created', () => {
-    loadMountAllowlist(); // sets allowlistLoadError
-    writeAllowlist({ allowedRoots: [], blockedPatterns: [], nonMainReadOnly: true });
-    expect(loadMountAllowlist()).toBeNull(); // still null — error cached
+    expect(loadMountAllowlist(allowlistPath)).toBeNull();
   });
 
   it('returns null when file has invalid JSON', () => {
     fs.writeFileSync(allowlistPath, 'not json');
-    expect(loadMountAllowlist()).toBeNull();
+    expect(loadMountAllowlist(allowlistPath)).toBeNull();
   });
 
   it('returns null when allowedRoots is not an array', () => {
     writeAllowlist({ allowedRoots: 'bad', blockedPatterns: [], nonMainReadOnly: true });
-    expect(loadMountAllowlist()).toBeNull();
+    expect(loadMountAllowlist(allowlistPath)).toBeNull();
   });
 
   it('returns null when blockedPatterns is missing', () => {
     writeAllowlist({ allowedRoots: [], nonMainReadOnly: true });
-    expect(loadMountAllowlist()).toBeNull();
+    expect(loadMountAllowlist(allowlistPath)).toBeNull();
   });
 
   it('returns null when nonMainReadOnly is not a boolean', () => {
     writeAllowlist({ allowedRoots: [], blockedPatterns: [], nonMainReadOnly: 'yes' });
-    expect(loadMountAllowlist()).toBeNull();
+    expect(loadMountAllowlist(allowlistPath)).toBeNull();
   });
 
   it('loads valid allowlist and merges default blocked patterns', () => {
@@ -80,44 +56,47 @@ describe('loadMountAllowlist', () => {
       blockedPatterns: ['custom-secret'],
       nonMainReadOnly: false,
     });
-    const result = loadMountAllowlist();
+    const result = loadMountAllowlist(allowlistPath);
     expect(result).not.toBeNull();
     expect(result?.blockedPatterns).toContain('.ssh');
     expect(result?.blockedPatterns).toContain('custom-secret');
   });
 
-  it('returns the same object reference on second call (cached)', () => {
+  it('reads fresh on each call (no stale cache across tests)', () => {
+    // Write one allowlist, read it, then overwrite, read again — should see updated value
     writeAllowlist({ allowedRoots: [], blockedPatterns: [], nonMainReadOnly: true });
-    const first = loadMountAllowlist();
-    const second = loadMountAllowlist();
-    expect(first).toBe(second);
+    const first = loadMountAllowlist(allowlistPath);
+    expect(first?.nonMainReadOnly).toBe(true);
+
+    writeAllowlist({ allowedRoots: [], blockedPatterns: [], nonMainReadOnly: false });
+    const second = loadMountAllowlist(allowlistPath);
+    expect(second?.nonMainReadOnly).toBe(false);
   });
 });
 
 describe('validateMount', () => {
   it('returns not-allowed when no allowlist configured', () => {
-    // No file written — allowlist is null
-    const result = validateMount({ hostPath: tmpDir }, true);
+    const result = validateMount({ hostPath: tmpDir }, true, allowlistPath);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('No mount allowlist');
   });
 
   it('rejects path traversal in containerPath', () => {
     writeAllowlist({ allowedRoots: [], blockedPatterns: [], nonMainReadOnly: true });
-    const result = validateMount({ hostPath: tmpDir, containerPath: '../escape' }, true);
+    const result = validateMount({ hostPath: tmpDir, containerPath: '../escape' }, true, allowlistPath);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('Invalid container path');
   });
 
   it('rejects absolute containerPath', () => {
     writeAllowlist({ allowedRoots: [], blockedPatterns: [], nonMainReadOnly: true });
-    const result = validateMount({ hostPath: tmpDir, containerPath: '/absolute' }, true);
+    const result = validateMount({ hostPath: tmpDir, containerPath: '/absolute' }, true, allowlistPath);
     expect(result.allowed).toBe(false);
   });
 
   it('rejects empty containerPath', () => {
     writeAllowlist({ allowedRoots: [], blockedPatterns: [], nonMainReadOnly: true });
-    const result = validateMount({ hostPath: tmpDir, containerPath: '   ' }, true);
+    const result = validateMount({ hostPath: tmpDir, containerPath: '   ' }, true, allowlistPath);
     expect(result.allowed).toBe(false);
   });
 
@@ -127,7 +106,7 @@ describe('validateMount', () => {
       blockedPatterns: [],
       nonMainReadOnly: true,
     });
-    const result = validateMount({ hostPath: path.join(tmpDir, 'does-not-exist') }, true);
+    const result = validateMount({ hostPath: path.join(tmpDir, 'does-not-exist') }, true, allowlistPath);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('does not exist');
   });
@@ -140,7 +119,7 @@ describe('validateMount', () => {
       blockedPatterns: [],
       nonMainReadOnly: true,
     });
-    const result = validateMount({ hostPath: sshDir }, true);
+    const result = validateMount({ hostPath: sshDir }, true, allowlistPath);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('.ssh');
   });
@@ -154,7 +133,7 @@ describe('validateMount', () => {
       nonMainReadOnly: true,
     });
     try {
-      const result = validateMount({ hostPath: outsideDir }, true);
+      const result = validateMount({ hostPath: outsideDir }, true, allowlistPath);
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('not under any allowed root');
     } finally {
@@ -170,7 +149,7 @@ describe('validateMount', () => {
       blockedPatterns: [],
       nonMainReadOnly: false,
     });
-    const result = validateMount({ hostPath: sub }, true); // readonly: undefined → default true
+    const result = validateMount({ hostPath: sub }, true, allowlistPath);
     expect(result.allowed).toBe(true);
     expect(result.effectiveReadonly).toBe(true);
   });
@@ -183,7 +162,7 @@ describe('validateMount', () => {
       blockedPatterns: [],
       nonMainReadOnly: false,
     });
-    const result = validateMount({ hostPath: sub, readonly: false }, true);
+    const result = validateMount({ hostPath: sub, readonly: false }, true, allowlistPath);
     expect(result.allowed).toBe(true);
     expect(result.effectiveReadonly).toBe(false);
   });
@@ -196,7 +175,7 @@ describe('validateMount', () => {
       blockedPatterns: [],
       nonMainReadOnly: true,
     });
-    const result = validateMount({ hostPath: sub, readonly: false }, false);
+    const result = validateMount({ hostPath: sub, readonly: false }, false, allowlistPath);
     expect(result.allowed).toBe(true);
     expect(result.effectiveReadonly).toBe(true);
   });
@@ -209,7 +188,7 @@ describe('validateMount', () => {
       blockedPatterns: [],
       nonMainReadOnly: false,
     });
-    const result = validateMount({ hostPath: sub, readonly: false }, true);
+    const result = validateMount({ hostPath: sub, readonly: false }, true, allowlistPath);
     expect(result.allowed).toBe(true);
     expect(result.effectiveReadonly).toBe(true);
   });
@@ -222,7 +201,7 @@ describe('validateMount', () => {
       blockedPatterns: [],
       nonMainReadOnly: true,
     });
-    const result = validateMount({ hostPath: sub }, true);
+    const result = validateMount({ hostPath: sub }, true, allowlistPath);
     expect(result.allowed).toBe(true);
     expect(result.resolvedContainerPath).toBe('mydata');
   });
@@ -235,7 +214,7 @@ describe('validateMount', () => {
       blockedPatterns: [],
       nonMainReadOnly: true,
     });
-    const result = validateMount({ hostPath: sub }, true);
+    const result = validateMount({ hostPath: sub }, true, allowlistPath);
     expect(result.allowed).toBe(true);
     expect(result.reason).toContain('My projects');
   });
@@ -257,6 +236,7 @@ describe('validateAdditionalMounts', () => {
       ],
       'test-group',
       true,
+      allowlistPath,
     );
     expect(result).toHaveLength(1);
     expect(result[0]?.containerPath).toBe('/workspace/extra/good');
@@ -265,7 +245,7 @@ describe('validateAdditionalMounts', () => {
 
   it('returns empty array when no mounts are provided', () => {
     writeAllowlist({ allowedRoots: [], blockedPatterns: [], nonMainReadOnly: true });
-    expect(validateAdditionalMounts([], 'test-group', true)).toHaveLength(0);
+    expect(validateAdditionalMounts([], 'test-group', true, allowlistPath)).toHaveLength(0);
   });
 });
 
