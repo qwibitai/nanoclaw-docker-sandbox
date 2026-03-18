@@ -419,3 +419,9 @@ export function generateAllowlistTemplate(): string {
 
   return JSON.stringify(template, null, 2);
 }
+
+/** @internal - for tests only. Resets in-memory cache. */
+export function _resetMountCacheForTests(): void {
+  cachedAllowlist = null;
+  allowlistLoadError = null;
+}
