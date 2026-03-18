@@ -289,6 +289,11 @@ export function startIpcWatcher(deps: IpcDeps): void {
   logger.info('IPC watcher started (per-group namespaces)');
 }
 
+/** @internal - for tests only. */
+export function _resetIpcWatcherForTests(): void {
+  ipcWatcherRunning = false;
+}
+
 export async function processTaskIpc(
   data: {
     type: string;
