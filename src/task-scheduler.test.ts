@@ -255,4 +255,207 @@ describe('task scheduler', () => {
 
     expect(vi.mocked(runContainerAgent)).toHaveBeenCalledOnce();
   });
+
+  it('runTask forwards result to sendMessage via streaming callback', async () => {
+    const { runContainerAgent } = await import('./container-runner.js');
+    vi.mocked(runContainerAgent).mockImplementationOnce(
+      // biome-ignore lint/suspicious/noExplicitAny: test mock captures streaming callback
+      async (_g: any, _o: any, _p: any, onOutput: any) => {
+        await onOutput({ result: 'Task complete', status: 'success' });
+        return { status: 'success' as const, result: 'Task complete' };
+      },
+    );
+
+    createTask({
+      id: 'task-stream',
+      group_folder: 'my-group',
+      chat_jid: 'my@g.us',
+      prompt: 'run it',
+      schedule_type: 'once',
+      schedule_value: '2026-01-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: new Date(Date.now() - 1000).toISOString(),
+      status: 'active',
+      created_at: '2026-01-01T00:00:00.000Z',
+    });
+
+    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const closeStdin = vi.fn();
+    const enqueueTask = vi.fn(
+      (_jid: string, _id: string, fn: () => Promise<void>) => {
+        void fn();
+      },
+    );
+
+    startSchedulerLoop({
+      registeredGroups: () => ({
+        'my@g.us': {
+          name: 'My Group',
+          folder: 'my-group',
+          trigger: 'always',
+          added_at: '2026-01-01T00:00:00.000Z',
+          isMain: false,
+        },
+      }),
+      getSessions: () => ({}),
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+      queue: { enqueueTask, closeStdin, notifyIdle: vi.fn() } as any,
+      onProcess: () => {},
+      sendMessage,
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(sendMessage).toHaveBeenCalledWith('my@g.us', 'Task complete');
+  });
+
+  it('runTask updates task last_result after successful run', async () => {
+    const { runContainerAgent } = await import('./container-runner.js');
+    vi.mocked(runContainerAgent).mockImplementationOnce(
+      // biome-ignore lint/suspicious/noExplicitAny: test mock captures streaming callback
+      async (_g: any, _o: any, _p: any, onOutput: any) => {
+        await onOutput({ result: 'Done!', status: 'success' });
+        return { status: 'success' as const, result: 'Done!' };
+      },
+    );
+
+    createTask({
+      id: 'task-result',
+      group_folder: 'my-group',
+      chat_jid: 'my@g.us',
+      prompt: 'run it',
+      schedule_type: 'once',
+      schedule_value: '2026-01-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: new Date(Date.now() - 1000).toISOString(),
+      status: 'active',
+      created_at: '2026-01-01T00:00:00.000Z',
+    });
+
+    const enqueueTask = vi.fn(
+      (_jid: string, _id: string, fn: () => Promise<void>) => {
+        void fn();
+      },
+    );
+
+    startSchedulerLoop({
+      registeredGroups: () => ({
+        'my@g.us': {
+          name: 'My Group',
+          folder: 'my-group',
+          trigger: 'always',
+          added_at: '2026-01-01T00:00:00.000Z',
+          isMain: false,
+        },
+      }),
+      getSessions: () => ({}),
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+      queue: { enqueueTask, closeStdin: vi.fn(), notifyIdle: vi.fn() } as any,
+      onProcess: () => {},
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    const task = getTaskById('task-result');
+    expect(task?.last_result).toBe('Done!');
+  });
+
+  it('runTask captures streaming error and sets last_result to error summary', async () => {
+    const { runContainerAgent } = await import('./container-runner.js');
+    vi.mocked(runContainerAgent).mockImplementationOnce(
+      // biome-ignore lint/suspicious/noExplicitAny: test mock captures streaming callback
+      async (_g: any, _o: any, _p: any, onOutput: any) => {
+        await onOutput({ status: 'error', result: null, error: 'container crashed' });
+        return { status: 'error' as const, result: null, error: 'container crashed' };
+      },
+    );
+
+    createTask({
+      id: 'task-stream-err',
+      group_folder: 'my-group',
+      chat_jid: 'my@g.us',
+      prompt: 'run it',
+      schedule_type: 'once',
+      schedule_value: '2026-01-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: new Date(Date.now() - 1000).toISOString(),
+      status: 'active',
+      created_at: '2026-01-01T00:00:00.000Z',
+    });
+
+    const enqueueTask = vi.fn(
+      (_jid: string, _id: string, fn: () => Promise<void>) => {
+        void fn();
+      },
+    );
+
+    startSchedulerLoop({
+      registeredGroups: () => ({
+        'my@g.us': {
+          name: 'My Group',
+          folder: 'my-group',
+          trigger: 'always',
+          added_at: '2026-01-01T00:00:00.000Z',
+          isMain: false,
+        },
+      }),
+      getSessions: () => ({}),
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+      queue: { enqueueTask, closeStdin: vi.fn(), notifyIdle: vi.fn() } as any,
+      onProcess: () => {},
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    const task = getTaskById('task-stream-err');
+    expect(task?.last_result).toBe('Error: container crashed');
+  });
+
+  it('runTask captures thrown exception and sets last_result to error summary', async () => {
+    const { runContainerAgent } = await import('./container-runner.js');
+    vi.mocked(runContainerAgent).mockRejectedValueOnce(new Error('network timeout'));
+
+    createTask({
+      id: 'task-throw',
+      group_folder: 'my-group',
+      chat_jid: 'my@g.us',
+      prompt: 'run it',
+      schedule_type: 'once',
+      schedule_value: '2026-01-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: new Date(Date.now() - 1000).toISOString(),
+      status: 'active',
+      created_at: '2026-01-01T00:00:00.000Z',
+    });
+
+    const enqueueTask = vi.fn(
+      (_jid: string, _id: string, fn: () => Promise<void>) => {
+        void fn();
+      },
+    );
+
+    startSchedulerLoop({
+      registeredGroups: () => ({
+        'my@g.us': {
+          name: 'My Group',
+          folder: 'my-group',
+          trigger: 'always',
+          added_at: '2026-01-01T00:00:00.000Z',
+          isMain: false,
+        },
+      }),
+      getSessions: () => ({}),
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+      queue: { enqueueTask, closeStdin: vi.fn(), notifyIdle: vi.fn() } as any,
+      onProcess: () => {},
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    const task = getTaskById('task-throw');
+    expect(task?.last_result).toBe('Error: network timeout');
+  });
 });
