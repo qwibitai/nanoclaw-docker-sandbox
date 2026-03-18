@@ -14,9 +14,9 @@
  *   When `approvalCallbacks` is passed, all non-Anthropic traffic requires
  *   explicit approval via Telegram. HTTP and HTTPS (CONNECT) are both handled.
  */
-import { createServer, Server } from 'http';
+import { createServer, type Server } from 'http';
 import { request as httpsRequest } from 'https';
-import { request as httpRequest, RequestOptions } from 'http';
+import { request as httpRequest, type RequestOptions } from 'http';
 import net from 'net';
 import fs from 'fs';
 import path from 'path';
@@ -374,7 +374,7 @@ export function startCredentialProxy(
     });
 
     // CONNECT handler for HTTPS tunneling
-    server.on('connect', async (req, clientSocket, head) => {
+    server.on('connect', async (req, clientSocket: net.Socket, head) => {
       const connectHost = req.url ?? '';
 
       // Allow Anthropic API through without permission check
@@ -389,7 +389,7 @@ export function startCredentialProxy(
       }
 
       const group = approvalCallbacks.resolveGroup(
-        (clientSocket as net.Socket).remoteAddress ?? '',
+        clientSocket.remoteAddress ?? '',
       );
       if (!group) {
         logger.warn(

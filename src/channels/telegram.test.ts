@@ -26,8 +26,10 @@ vi.mock('../logger.js', () => ({
 
 // --- Grammy mock ---
 
+// biome-ignore lint/suspicious/noExplicitAny: mock handler type accepts arbitrary grammY context shapes
 type Handler = (...args: any[]) => any;
 
+// biome-ignore lint/suspicious/noExplicitAny: ref is typed by assignment in MockBot constructor
 const botRef = vi.hoisted(() => ({ current: null as any }));
 
 vi.mock('grammy', () => ({
@@ -69,7 +71,7 @@ vi.mock('grammy', () => ({
   },
 }));
 
-import { TelegramChannel, TelegramChannelOpts } from './telegram.js';
+import { TelegramChannel, type TelegramChannelOpts } from './telegram.js';
 
 // --- Test helpers ---
 

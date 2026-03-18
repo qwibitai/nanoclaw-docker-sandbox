@@ -1,11 +1,11 @@
 import https from 'https';
-import { Api, Bot } from 'grammy';
+import { type Api, type Context, type Filter, Bot } from 'grammy';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
-import { registerChannel, ChannelOpts } from './registry.js';
-import {
+import { registerChannel, type ChannelOpts } from './registry.js';
+import type {
   Channel,
   OnChatMetadata,
   OnInboundMessage,
@@ -72,7 +72,7 @@ export class TelegramChannel implements Channel {
       const chatName =
         chatType === 'private'
           ? ctx.from?.first_name || 'Private'
-          : (ctx.chat as any).title || 'Unknown';
+          : 'title' in ctx.chat ? ctx.chat.title : 'Unknown';
 
       ctx.reply(
         `Chat ID: \`tg:${chatId}\`\nName: ${chatName}\nType: ${chatType}`,
@@ -104,7 +104,7 @@ export class TelegramChannel implements Channel {
       const chatName =
         ctx.chat.type === 'private'
           ? senderName
-          : (ctx.chat as any).title || chatJid;
+          : 'title' in ctx.chat ? ctx.chat.title : chatJid;
 
       // Translate Telegram @bot_username mentions into TRIGGER_PATTERN format.
       // Telegram @mentions (e.g., @andy_ai_bot) won't match TRIGGER_PATTERN
@@ -202,7 +202,7 @@ export class TelegramChannel implements Channel {
     });
 
     // Handle non-text messages with placeholders so the agent knows something was sent
-    const storeNonText = (ctx: any, placeholder: string) => {
+    const storeNonText = (ctx: Filter<Context, 'message'>, placeholder: string) => {
       const chatJid = `tg:${ctx.chat.id}`;
       const group = this.opts.registeredGroups()[chatJid];
       if (!group) return;
@@ -256,8 +256,9 @@ export class TelegramChannel implements Channel {
     });
 
     // Start polling — returns a Promise that resolves when started
+    const bot = this.bot;
     return new Promise<void>((resolve) => {
-      this.bot!.start({
+      bot.start({
         onStart: (botInfo) => {
           logger.info(
             { username: botInfo.username, id: botInfo.id },

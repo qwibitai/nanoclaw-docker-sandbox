@@ -33,7 +33,7 @@ function makeRequest(
         res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
           resolve({
-            statusCode: res.statusCode!,
+            statusCode: res.statusCode ?? 0,
             body: Buffer.concat(chunks).toString(),
             headers: res.headers,
           });

@@ -98,6 +98,15 @@ function askQuestion(prompt: string): Promise<string> {
   });
 }
 
+/** Extract Baileys disconnect status code from an opaque error object. */
+function getBaileysStatusCode(error: unknown): number | undefined {
+  if (error === null || typeof error !== 'object') return undefined;
+  const output = Object.hasOwn(error, 'output') ? (error as Record<string, unknown>).output : undefined;
+  if (output === null || typeof output !== 'object') return undefined;
+  const statusCode = Object.hasOwn(output, 'statusCode') ? (output as Record<string, unknown>).statusCode : undefined;
+  return typeof statusCode === 'number' ? statusCode : undefined;
+}
+
 async function connectSocket(
   phoneNumber?: string,
   isReconnect = false,
@@ -132,15 +141,15 @@ async function connectSocket(
     // Only on first connect (not reconnect after 515)
     setTimeout(async () => {
       try {
-        const code = await sock.requestPairingCode(phoneNumber!);
+        const code = await sock.requestPairingCode(phoneNumber);
         console.log(`\n🔗 Your pairing code: ${code}\n`);
         console.log('  1. Open WhatsApp on your phone');
         console.log('  2. Tap Settings → Linked Devices → Link a Device');
         console.log('  3. Tap "Link with phone number instead"');
         console.log(`  4. Enter this code: ${code}\n`);
         fs.writeFileSync(STATUS_FILE, `pairing_code:${code}`);
-      } catch (err: any) {
-        console.error('Failed to request pairing code:', err.message);
+      } catch (err) {
+        console.error('Failed to request pairing code:', err instanceof Error ? err.message : err);
         process.exit(1);
       }
     }, 3000);
@@ -160,7 +169,7 @@ async function connectSocket(
     }
 
     if (connection === 'close') {
-      const reason = (lastDisconnect?.error as any)?.output?.statusCode;
+      const reason = getBaileysStatusCode(lastDisconnect?.error);
 
       if (reason === DisconnectReason.loggedOut) {
         fs.writeFileSync(STATUS_FILE, 'failed:logged_out');
