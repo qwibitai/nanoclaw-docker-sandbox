@@ -65,7 +65,7 @@ export interface PermissionApprovalCallbacks {
   /** Returns the group folder and chatJid for the container making the request.
    *  The proxy has no direct way to know which container's request it is
    *  (containers connect via host.docker.internal), so the host passes a resolver. */
-  resolveGroup: () => { groupFolder: string; chatJid: string } | null;
+  resolveGroup: (remoteAddress: string) => { groupFolder: string; chatJid: string } | null;
   /** Send a 3-button (or 2-button if proposal is null) Telegram message.
    *  Returns the Telegram message ID so it can be tracked for restart cleanup. */
   sendPermissionRequest: (req: PermissionRequest) => Promise<number | null>;
@@ -282,7 +282,7 @@ export function startCredentialProxy(
 
         // Permission check for non-Anthropic HTTP traffic
         if (!isAnthropicReq && approvalCallbacks) {
-          const group = approvalCallbacks.resolveGroup();
+          const group = approvalCallbacks.resolveGroup(req.socket.remoteAddress ?? '');
           if (!group) {
             logger.warn(
               { url: req.url },
@@ -384,7 +384,7 @@ export function startCredentialProxy(
         return;
       }
 
-      const group = approvalCallbacks.resolveGroup();
+      const group = approvalCallbacks.resolveGroup(clientSocket.remoteAddress ?? '');
       if (!group) {
         logger.warn(
           { host: connectHost },

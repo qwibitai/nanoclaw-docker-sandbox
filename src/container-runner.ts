@@ -21,11 +21,14 @@ import { logger } from './logger.js';
 import {
   CONTAINER_HOST_GATEWAY,
   CONTAINER_RUNTIME_BIN,
-  getProxyBridgeIp,
   hostGatewayArgs,
   readonlyMountArgs,
   stopContainer,
 } from './container-runtime.js';
+import {
+  registerContainerGroup,
+  deregisterContainerGroup,
+} from './container-group-registry.js';
 import { detectAuthMode } from './credential-proxy.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
@@ -378,6 +381,18 @@ function buildContainerArgs(
   return args;
 }
 
+async function getContainerNetworkIp(containerName: string): Promise<string | null> {
+  const cmd = `${CONTAINER_RUNTIME_BIN} inspect --format '{{(index .NetworkSettings.Networks "nanoclaw-proxy").IPAddress}}' ${containerName}`;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
+    const ip = await new Promise<string | null>((resolve) => {
+      exec(cmd, (err, stdout) => resolve(err ? null : stdout.trim() || null));
+    });
+    if (ip) return ip;
+  }
+  return null;
+}
+
 export async function runContainerAgent(
   group: RegisteredGroup,
   input: ContainerInput,
@@ -430,6 +445,25 @@ export async function runContainerAgent(
     });
 
     onProcess(container, containerName);
+
+    // Register container IP for resolveGroup after spawn (permissionApproval only)
+    if (group.containerConfig?.permissionApproval) {
+      void (async () => {
+        const ip = await getContainerNetworkIp(containerName);
+        if (ip) {
+          registerContainerGroup(ip, {
+            groupFolder: group.folder,
+            chatJid: input.chatJid,
+          });
+          container.once('close', () => deregisterContainerGroup(ip));
+        } else {
+          logger.warn(
+            { group: group.name, containerName },
+            'Could not resolve container IP for group registry',
+          );
+        }
+      })();
+    }
 
     let stdout = '';
     let stderr = '';

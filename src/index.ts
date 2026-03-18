@@ -48,6 +48,7 @@ import {
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
+import { resolveContainerGroup } from './container-group-registry.js';
 import { startIpcWatcher } from './ipc.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
@@ -489,13 +490,12 @@ async function main(): Promise<void> {
 
   // Start credential proxy (containers route API calls through this).
   // Approval callbacks are wired after channel connect so sendPermissionRequest is available.
-  // resolveGroup returns null for now — HTTP/HTTPS permission is blocked until a mechanism
-  // to pass group context (e.g. X-Nanoclaw-Group header) is implemented.
+  // resolveGroup looks up the container's bridge IP to find the originating group.
   const proxyServer = await startCredentialProxy(
     CREDENTIAL_PROXY_PORT,
     PROXY_BIND_HOST,
     {
-      resolveGroup: () => null,
+      resolveGroup: (addr) => resolveContainerGroup(addr),
       sendPermissionRequest: async (req) => {
         const channel = findChannel(channels, req.chatJid);
         if (!channel?.sendPermissionRequest) return null;

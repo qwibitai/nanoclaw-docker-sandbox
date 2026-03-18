@@ -29,22 +29,18 @@ vi.mock('./logger.js', () => ({
 }));
 
 // Mock fs
-vi.mock('fs', async () => {
-  const actual = await vi.importActual<typeof import('fs')>('fs');
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      existsSync: vi.fn(() => false),
-      mkdirSync: vi.fn(),
-      writeFileSync: vi.fn(),
-      readFileSync: vi.fn(() => ''),
-      readdirSync: vi.fn(() => []),
-      statSync: vi.fn(() => ({ isDirectory: () => false })),
-      copyFileSync: vi.fn(),
-    },
-  };
-});
+vi.mock('fs', () => ({
+  default: {
+    existsSync: vi.fn(() => false),
+    mkdirSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    readFileSync: vi.fn(() => ''),
+    readdirSync: vi.fn(() => []),
+    statSync: vi.fn(() => ({ isDirectory: () => false })),
+    copyFileSync: vi.fn(),
+    cpSync: vi.fn(),
+  },
+}));
 
 // Mock mount-security
 vi.mock('./mount-security.js', () => ({
@@ -71,27 +67,46 @@ function createFakeProcess() {
 let fakeProc: ReturnType<typeof createFakeProcess>;
 
 // Mock child_process.spawn
-vi.mock('child_process', async () => {
-  const actual =
-    await vi.importActual<typeof import('child_process')>('child_process');
-  return {
-    ...actual,
-    spawn: vi.fn(() => fakeProc),
-    exec: vi.fn(
-      (_cmd: string, _opts: unknown, cb?: (err: Error | null) => void) => {
-        if (cb) cb(null);
-        return new EventEmitter();
-      },
-    ),
-    execSync: vi.fn((cmd: string) => {
-      if (cmd.includes('network inspect nanoclaw-proxy')) return '172.20.0.1\n';
-      return '';
-    }),
-  };
-});
+vi.mock('child_process', () => ({
+  spawn: vi.fn(() => fakeProc),
+  execSync: vi.fn((cmd: string) => {
+    if (cmd.includes('network inspect nanoclaw-proxy')) return '172.20.0.1\n';
+    return '';
+  }),
+  exec: vi.fn(
+    (
+      cmd: string,
+      optsOrCb?: unknown,
+      cb?: (err: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      // exec(cmd, callback) or exec(cmd, opts, callback)
+      const callback = typeof optsOrCb === 'function'
+        ? (optsOrCb as (err: Error | null, stdout: string, stderr: string) => void)
+        : cb;
+      if (callback) {
+        // Return a fake IP for docker inspect calls
+        const stdout = cmd.includes('inspect') ? '172.19.0.2\n' : '';
+        callback(null, stdout, '');
+      }
+      return new EventEmitter();
+    },
+  ),
+}));
+
+// Mock the group registry so we can assert registrations
+vi.mock('./container-group-registry.js', () => ({
+  registerContainerGroup: vi.fn(),
+  deregisterContainerGroup: vi.fn(),
+  resolveContainerGroup: vi.fn().mockReturnValue(null),
+  _clearRegistry: vi.fn(),
+}));
 
 import { spawn, execSync } from 'child_process';
 import { runContainerAgent, ContainerOutput } from './container-runner.js';
+import {
+  registerContainerGroup,
+  deregisterContainerGroup,
+} from './container-group-registry.js';
 import type { RegisteredGroup } from './types.js';
 
 const testGroup: RegisteredGroup = {
@@ -205,12 +220,44 @@ describe('container-runner spawn args', () => {
     expect(args).not.toContain('no-new-privileges');
   });
 
-  it('does not set proxy env vars when permissionApproval is false', async () => {
+  it('does not inject credential proxy vars when permissionApproval is false', async () => {
     const args = await spawnArgsFor(testGroup);
     const env = envArgs(args);
-    expect(env['HTTP_PROXY']).toBeUndefined();
-    expect(env['HTTPS_PROXY']).toBeUndefined();
-    expect(env['NO_PROXY']).toBeUndefined();
+    // When permissionApproval is false, the credential proxy URL (host.docker.internal)
+    // must NOT be injected. A system-level proxy may still appear from process.env.
+    expect(env['HTTP_PROXY'] ?? '').not.toMatch(/host\.docker\.internal/);
+    expect(env['HTTPS_PROXY'] ?? '').not.toMatch(/host\.docker\.internal/);
+  });
+
+  it('registers container IP in group registry when permissionApproval is true', async () => {
+    vi.mocked(registerContainerGroup).mockClear();
+    await spawnArgsFor(testGroupWithPermissionApproval);
+    // Allow async IP lookup to complete
+    await vi.waitFor(() =>
+      expect(registerContainerGroup).toHaveBeenCalledWith(
+        '172.19.0.2',
+        expect.objectContaining({ groupFolder: testGroup.folder }),
+      ),
+    );
+  });
+
+  it('deregisters container IP when container exits', async () => {
+    vi.mocked(deregisterContainerGroup).mockClear();
+    await spawnArgsFor(testGroupWithPermissionApproval);
+    await vi.waitFor(() => expect(registerContainerGroup).toHaveBeenCalled());
+
+    fakeProc.emit('close', 0);
+
+    await vi.waitFor(() =>
+      expect(deregisterContainerGroup).toHaveBeenCalledWith('172.19.0.2'),
+    );
+  });
+
+  it('does not register IP when permissionApproval is false', async () => {
+    vi.mocked(registerContainerGroup).mockClear();
+    await spawnArgsFor(testGroup);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(registerContainerGroup).not.toHaveBeenCalled();
   });
 });
 
