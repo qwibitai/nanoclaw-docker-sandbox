@@ -1,6 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import Database from 'better-sqlite3';
-import fs from 'fs';
-import path from 'path';
 
 import { ASSISTANT_NAME, DATA_DIR, STORE_DIR } from './config.js';
 import { isValidGroupFolder } from './group-folder.js';

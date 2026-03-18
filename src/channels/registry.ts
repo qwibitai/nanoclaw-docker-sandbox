@@ -1,7 +1,7 @@
 import type {
   Channel,
-  OnInboundMessage,
   OnChatMetadata,
+  OnInboundMessage,
   RegisteredGroup,
 } from '../types.js';
 

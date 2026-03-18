@@ -1,6 +1,5 @@
-import fs from 'fs';
-import path from 'path';
-
+import fs from 'node:fs';
+import path from 'node:path';
 import { CronExpressionParser } from 'cron-parser';
 
 import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
@@ -364,7 +363,7 @@ export async function processTaskIpc(
           }
         } else if (scheduleType === 'interval') {
           const ms = parseInt(data.schedule_value, 10);
-          if (isNaN(ms) || ms <= 0) {
+          if (Number.isNaN(ms) || ms <= 0) {
             logger.warn(
               { scheduleValue: data.schedule_value },
               'Invalid interval',
@@ -374,7 +373,7 @@ export async function processTaskIpc(
           nextRun = new Date(Date.now() + ms).toISOString();
         } else if (scheduleType === 'once') {
           const date = new Date(data.schedule_value);
-          if (isNaN(date.getTime())) {
+          if (Number.isNaN(date.getTime())) {
             logger.warn(
               { scheduleValue: data.schedule_value },
               'Invalid timestamp',
@@ -514,7 +513,7 @@ export async function processTaskIpc(
             }
           } else if (updatedTask.schedule_type === 'interval') {
             const ms = parseInt(updatedTask.schedule_value, 10);
-            if (!isNaN(ms) && ms > 0) {
+            if (!Number.isNaN(ms) && ms > 0) {
               updates.next_run = new Date(Date.now() + ms).toISOString();
             }
           }

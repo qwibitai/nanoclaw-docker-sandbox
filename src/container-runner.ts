@@ -2,9 +2,9 @@
  * Container Runner for NanoClaw
  * Spawns agent execution in containers and handles IPC
  */
-import { type ChildProcess, exec, spawn } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import { type ChildProcess, exec, spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import {
   CONTAINER_IMAGE,
@@ -16,8 +16,10 @@ import {
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
-import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
-import { logger } from './logger.js';
+import {
+  deregisterContainerGroup,
+  registerContainerGroup,
+} from './container-group-registry.js';
 import {
   CONTAINER_HOST_GATEWAY,
   CONTAINER_RUNTIME_BIN,
@@ -25,11 +27,9 @@ import {
   readonlyMountArgs,
   stopContainer,
 } from './container-runtime.js';
-import {
-  registerContainerGroup,
-  deregisterContainerGroup,
-} from './container-group-registry.js';
 import { detectAuthMode } from './credential-proxy.js';
+import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
+import { logger } from './logger.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import type { RegisteredGroup } from './types.js';
 
@@ -137,7 +137,7 @@ function buildVolumeMounts(
   if (!fs.existsSync(settingsFile)) {
     fs.writeFileSync(
       settingsFile,
-      JSON.stringify(
+      `${JSON.stringify(
         {
           env: {
             // Enable agent swarms (subagent orchestration)
@@ -153,7 +153,7 @@ function buildVolumeMounts(
         },
         null,
         2,
-      ) + '\n',
+      )}\n`,
     );
   }
 
@@ -502,7 +502,8 @@ export async function runContainerAgent(
       if (onOutput) {
         parseBuffer += chunk;
         let startIdx: number;
-        while ((startIdx = parseBuffer.indexOf(OUTPUT_START_MARKER)) !== -1) {
+        startIdx = parseBuffer.indexOf(OUTPUT_START_MARKER);
+        while (startIdx !== -1) {
           const endIdx = parseBuffer.indexOf(OUTPUT_END_MARKER, startIdx);
           if (endIdx === -1) break; // Incomplete pair, wait for more data
 
@@ -528,6 +529,7 @@ export async function runContainerAgent(
               'Failed to parse streamed output chunk',
             );
           }
+          startIdx = parseBuffer.indexOf(OUTPUT_START_MARKER);
         }
       }
     });
@@ -838,7 +840,7 @@ export function writeGroupsSnapshot(
   groupFolder: string,
   isMain: boolean,
   groups: AvailableGroup[],
-  registeredJids: Set<string>,
+  _registeredJids: Set<string>,
 ): void {
   const groupIpcDir = resolveGroupIpcPath(groupFolder);
   fs.mkdirSync(groupIpcDir, { recursive: true });

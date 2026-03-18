@@ -1,6 +1,6 @@
-import type { ChildProcess } from 'child_process';
+import type { ChildProcess } from 'node:child_process';
+import fs from 'node:fs';
 import { CronExpressionParser } from 'cron-parser';
-import fs from 'fs';
 
 import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
@@ -16,8 +16,8 @@ import {
   updateTask,
   updateTaskAfterRun,
 } from './db.js';
-import type { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
+import type { GroupQueue } from './group-queue.js';
 import { logger } from './logger.js';
 import type { RegisteredGroup, ScheduledTask } from './types.js';
 
@@ -52,6 +52,7 @@ export function computeNextRun(task: ScheduledTask): string | null {
     }
     // Anchor to the scheduled time, not now, to prevent drift.
     // Skip past any missed intervals so we always land in the future.
+    // biome-ignore lint/style/noNonNullAssertion: only called when task.next_run is set
     let next = new Date(task.next_run!).getTime() + ms;
     while (next <= now) {
       next += ms;

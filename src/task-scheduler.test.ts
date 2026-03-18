@@ -41,6 +41,7 @@ describe('task scheduler', () => {
     startSchedulerLoop({
       registeredGroups: () => ({}),
       getSessions: () => ({}),
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       queue: { enqueueTask } as any,
       onProcess: () => {},
       sendMessage: async () => {},
@@ -74,6 +75,7 @@ describe('task scheduler', () => {
 
     // Should be anchored to scheduledTime + 60s, NOT Date.now() + 60s
     const expected = new Date(scheduledTime).getTime() + 60000;
+    // biome-ignore lint/style/noNonNullAssertion: guarded by expect(nextRun).not.toBeNull() above
     expect(new Date(nextRun!).getTime()).toBe(expected);
   });
 
@@ -120,10 +122,12 @@ describe('task scheduler', () => {
     const nextRun = computeNextRun(task);
     expect(nextRun).not.toBeNull();
     // Must be in the future
+    // biome-ignore lint/style/noNonNullAssertion: guarded by expect(nextRun).not.toBeNull() above
     expect(new Date(nextRun!).getTime()).toBeGreaterThan(Date.now());
     // Must be aligned to the original schedule grid
-    const offset =
-      (new Date(nextRun!).getTime() - new Date(scheduledTime).getTime()) % ms;
+    // biome-ignore lint/style/noNonNullAssertion: guarded by expect(nextRun).not.toBeNull() above
+    const nextRunTime = new Date(nextRun!).getTime();
+    const offset = (nextRunTime - new Date(scheduledTime).getTime()) % ms;
     expect(offset).toBe(0);
   });
 });

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import http from 'http';
-import type { AddressInfo } from 'net';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockEnv } = vi.hoisted(() => ({
   mockEnv: {} as Record<string, string>,
@@ -118,9 +118,7 @@ describe('credential-proxy', () => {
       '{}',
     );
 
-    expect(lastUpstreamHeaders['authorization']).toBe(
-      'Bearer real-oauth-token',
-    );
+    expect(lastUpstreamHeaders.authorization).toBe('Bearer real-oauth-token');
   });
 
   it('OAuth mode does not inject Authorization when container omits it', async () => {
@@ -143,7 +141,7 @@ describe('credential-proxy', () => {
     );
 
     expect(lastUpstreamHeaders['x-api-key']).toBe('temp-key-from-exchange');
-    expect(lastUpstreamHeaders['authorization']).toBeUndefined();
+    expect(lastUpstreamHeaders.authorization).toBeUndefined();
   });
 
   it('strips hop-by-hop headers', async () => {

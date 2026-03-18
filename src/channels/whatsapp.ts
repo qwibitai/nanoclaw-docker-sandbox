@@ -1,18 +1,17 @@
-import { exec } from 'child_process';
-import fs from 'fs';
-import https from 'https';
-import path from 'path';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-
+import { exec } from 'node:child_process';
+import fs from 'node:fs';
+import https from 'node:https';
+import path from 'node:path';
 import makeWASocket, {
   Browsers,
   DisconnectReason,
-  type WASocket,
   fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore,
   normalizeMessageContent,
   useMultiFileAuthState,
+  type WASocket,
 } from '@whiskeysockets/baileys';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 // Create proxy agent from environment if available
 const proxyUrl =
@@ -74,11 +73,11 @@ import { getLastGroupSync, setLastGroupSync, updateChatName } from '../db.js';
 import { logger } from '../logger.js';
 import type {
   Channel,
-  OnInboundMessage,
   OnChatMetadata,
+  OnInboundMessage,
   RegisteredGroup,
 } from '../types.js';
-import { registerChannel, type ChannelOpts } from './registry.js';
+import { type ChannelOpts, registerChannel } from './registry.js';
 
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 

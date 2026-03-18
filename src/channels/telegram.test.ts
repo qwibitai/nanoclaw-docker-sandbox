@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Mocks ---
 
@@ -63,6 +63,7 @@ vi.mock('grammy', () => ({
       this.errorHandler = handler;
     }
 
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     start(opts: { onStart: (botInfo: any) => void }) {
       opts.onStart({ username: 'andy_ai_bot', id: 12345 });
     }
@@ -103,6 +104,7 @@ function createTextCtx(overrides: {
   username?: string;
   messageId?: number;
   date?: number;
+  // biome-ignore lint/suspicious/noExplicitAny: test helper — Telegram entity shape is complex
   entities?: any[];
 }) {
   const chatId = overrides.chatId ?? 100200300;
@@ -137,6 +139,7 @@ function createMediaCtx(overrides: {
   date?: number;
   messageId?: number;
   caption?: string;
+  // biome-ignore lint/suspicious/noExplicitAny: test helper — extra payload shape varies
   extra?: Record<string, any>;
 }) {
   const chatId = overrides.chatId ?? 100200300;
@@ -329,6 +332,7 @@ describe('TelegramChannel', () => {
       await channel.connect();
 
       const ctx = createTextCtx({ text: 'Hi' });
+      // biome-ignore lint/suspicious/noExplicitAny: force undefined on non-nullable field for test
       ctx.from.first_name = undefined as any;
       await triggerTextMessage(ctx);
 
@@ -344,7 +348,9 @@ describe('TelegramChannel', () => {
       await channel.connect();
 
       const ctx = createTextCtx({ text: 'Hi', fromId: 42 });
+      // biome-ignore lint/suspicious/noExplicitAny: force undefined on non-nullable field for test
       ctx.from.first_name = undefined as any;
+      // biome-ignore lint/suspicious/noExplicitAny: force undefined on non-nullable field for test
       ctx.from.username = undefined as any;
       await triggerTextMessage(ctx);
 
@@ -878,6 +884,7 @@ describe('TelegramChannel', () => {
       const channel = new TelegramChannel('test-token', opts);
       await channel.connect();
 
+      // biome-ignore lint/style/noNonNullAssertion: handler guaranteed registered in connect()
       const handler = currentBot().commandHandlers.get('chatid')!;
       const ctx = {
         chat: { id: 100200300, type: 'group' as const },
@@ -898,6 +905,7 @@ describe('TelegramChannel', () => {
       const channel = new TelegramChannel('test-token', opts);
       await channel.connect();
 
+      // biome-ignore lint/style/noNonNullAssertion: handler guaranteed registered in connect()
       const handler = currentBot().commandHandlers.get('chatid')!;
       const ctx = {
         chat: { id: 555, type: 'private' as const },
@@ -918,6 +926,7 @@ describe('TelegramChannel', () => {
       const channel = new TelegramChannel('test-token', opts);
       await channel.connect();
 
+      // biome-ignore lint/style/noNonNullAssertion: handler guaranteed registered in connect()
       const handler = currentBot().commandHandlers.get('ping')!;
       const ctx = { reply: vi.fn() };
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GroupQueue } from './group-queue.js';
 
@@ -40,7 +40,7 @@ describe('GroupQueue', () => {
     let concurrentCount = 0;
     let maxConcurrent = 0;
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (_groupJid: string) => {
       concurrentCount++;
       maxConcurrent = Math.max(maxConcurrent, concurrentCount);
       // Simulate async work
@@ -69,7 +69,7 @@ describe('GroupQueue', () => {
     let maxActive = 0;
     const completionCallbacks: Array<() => void> = [];
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (_groupJid: string) => {
       activeCount++;
       maxActive = Math.max(maxActive, activeCount);
       await new Promise<void>((resolve) => completionCallbacks.push(resolve));
@@ -102,9 +102,9 @@ describe('GroupQueue', () => {
 
   it('drains tasks before messages for same group', async () => {
     const executionOrder: string[] = [];
-    let resolveFirst: () => void;
+    let resolveFirst: () => void = () => {};
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (_groupJid: string) => {
       if (executionOrder.length === 0) {
         // First call: block until we release it
         await new Promise<void>((resolve) => {
@@ -129,7 +129,7 @@ describe('GroupQueue', () => {
     queue.enqueueMessageCheck('group1@g.us');
 
     // Release the first processing
-    resolveFirst!();
+    resolveFirst?.();
     await vi.advanceTimersByTimeAsync(10);
 
     // Task should have run before the second message check
@@ -246,7 +246,7 @@ describe('GroupQueue', () => {
   // --- Running task dedup (Issue #138) ---
 
   it('rejects duplicate enqueue of a currently-running task', async () => {
-    let resolveTask: () => void;
+    let resolveTask: () => void = () => {};
     let taskCallCount = 0;
 
     const taskFn = vi.fn(async () => {
@@ -271,7 +271,7 @@ describe('GroupQueue', () => {
     expect(dupFn).not.toHaveBeenCalled();
 
     // Complete the original task
-    resolveTask!();
+    resolveTask?.();
     await vi.advanceTimersByTimeAsync(10);
 
     // Only one execution total
@@ -281,8 +281,8 @@ describe('GroupQueue', () => {
   // --- Idle preemption ---
 
   it('does NOT preempt active container when not idle', async () => {
-    const fs = await import('fs');
-    let resolveProcess: () => void;
+    const fs = await import('node:fs');
+    let resolveProcess: () => void = () => {};
 
     const processMessages = vi.fn(async () => {
       await new Promise<void>((resolve) => {
@@ -300,6 +300,7 @@ describe('GroupQueue', () => {
     // Register a process so closeStdin has a groupFolder
     queue.registerProcess(
       'group1@g.us',
+      // biome-ignore lint/suspicious/noExplicitAny: minimal container mock for test
       {} as any,
       'container-1',
       'test-group',
@@ -316,13 +317,13 @@ describe('GroupQueue', () => {
     );
     expect(closeWrites).toHaveLength(0);
 
-    resolveProcess!();
+    resolveProcess?.();
     await vi.advanceTimersByTimeAsync(10);
   });
 
   it('preempts idle container when task is enqueued', async () => {
-    const fs = await import('fs');
-    let resolveProcess: () => void;
+    const fs = await import('node:fs');
+    let resolveProcess: () => void = () => {};
 
     const processMessages = vi.fn(async () => {
       await new Promise<void>((resolve) => {
@@ -340,6 +341,7 @@ describe('GroupQueue', () => {
     // Register process and mark idle
     queue.registerProcess(
       'group1@g.us',
+      // biome-ignore lint/suspicious/noExplicitAny: minimal container mock for test
       {} as any,
       'container-1',
       'test-group',
@@ -359,13 +361,13 @@ describe('GroupQueue', () => {
     );
     expect(closeWrites).toHaveLength(1);
 
-    resolveProcess!();
+    resolveProcess?.();
     await vi.advanceTimersByTimeAsync(10);
   });
 
   it('sendMessage resets idleWaiting so a subsequent task enqueue does not preempt', async () => {
-    const fs = await import('fs');
-    let resolveProcess: () => void;
+    const fs = await import('node:fs');
+    let resolveProcess: () => void = () => {};
 
     const processMessages = vi.fn(async () => {
       await new Promise<void>((resolve) => {
@@ -379,6 +381,7 @@ describe('GroupQueue', () => {
     await vi.advanceTimersByTimeAsync(10);
     queue.registerProcess(
       'group1@g.us',
+      // biome-ignore lint/suspicious/noExplicitAny: minimal container mock for test
       {} as any,
       'container-1',
       'test-group',
@@ -402,12 +405,12 @@ describe('GroupQueue', () => {
     );
     expect(closeWrites).toHaveLength(0);
 
-    resolveProcess!();
+    resolveProcess?.();
     await vi.advanceTimersByTimeAsync(10);
   });
 
   it('sendMessage returns false for task containers so user messages queue up', async () => {
-    let resolveTask: () => void;
+    let resolveTask: () => void = () => {};
 
     const taskFn = vi.fn(async () => {
       await new Promise<void>((resolve) => {
@@ -420,6 +423,7 @@ describe('GroupQueue', () => {
     await vi.advanceTimersByTimeAsync(10);
     queue.registerProcess(
       'group1@g.us',
+      // biome-ignore lint/suspicious/noExplicitAny: minimal container mock for test
       {} as any,
       'container-1',
       'test-group',
@@ -429,13 +433,13 @@ describe('GroupQueue', () => {
     const result = queue.sendMessage('group1@g.us', 'hello');
     expect(result).toBe(false);
 
-    resolveTask!();
+    resolveTask?.();
     await vi.advanceTimersByTimeAsync(10);
   });
 
   it('preempts when idle arrives with pending tasks', async () => {
-    const fs = await import('fs');
-    let resolveProcess: () => void;
+    const fs = await import('node:fs');
+    let resolveProcess: () => void = () => {};
 
     const processMessages = vi.fn(async () => {
       await new Promise<void>((resolve) => {
@@ -453,6 +457,7 @@ describe('GroupQueue', () => {
     // Register process and enqueue a task (no idle yet — no preemption)
     queue.registerProcess(
       'group1@g.us',
+      // biome-ignore lint/suspicious/noExplicitAny: minimal container mock for test
       {} as any,
       'container-1',
       'test-group',
@@ -478,7 +483,7 @@ describe('GroupQueue', () => {
     );
     expect(closeWrites).toHaveLength(1);
 
-    resolveProcess!();
+    resolveProcess?.();
     await vi.advanceTimersByTimeAsync(10);
   });
 });

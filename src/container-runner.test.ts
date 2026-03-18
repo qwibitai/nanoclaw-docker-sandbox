@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { EventEmitter } from 'events';
-import { PassThrough } from 'stream';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Sentinel markers must match container-runner.ts
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -106,12 +106,12 @@ vi.mock('./container-group-registry.js', () => ({
   _clearRegistry: vi.fn(),
 }));
 
-import { spawn, execSync } from 'child_process';
-import { runContainerAgent, type ContainerOutput } from './container-runner.js';
+import { spawn } from 'node:child_process';
 import {
-  registerContainerGroup,
   deregisterContainerGroup,
+  registerContainerGroup,
 } from './container-group-registry.js';
+import { type ContainerOutput, runContainerAgent } from './container-runner.js';
 import type { RegisteredGroup } from './types.js';
 
 const testGroup: RegisteredGroup = {
@@ -185,17 +185,17 @@ describe('container-runner spawn args', () => {
   it('includes host.docker.internal in NO_PROXY when permissionApproval is true', async () => {
     const args = await spawnArgsFor(testGroupWithPermissionApproval);
     const env = envArgs(args);
-    expect(env['NO_PROXY']).toContain('host.docker.internal');
-    expect(env['no_proxy']).toContain('host.docker.internal');
+    expect(env.NO_PROXY).toContain('host.docker.internal');
+    expect(env.no_proxy).toContain('host.docker.internal');
   });
 
   it('sets HTTP_PROXY and HTTPS_PROXY to credential proxy URL when permissionApproval is true', async () => {
     const args = await spawnArgsFor(testGroupWithPermissionApproval);
     const env = envArgs(args);
-    expect(env['HTTP_PROXY']).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
-    expect(env['HTTPS_PROXY']).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
-    expect(env['http_proxy']).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
-    expect(env['https_proxy']).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
+    expect(env.HTTP_PROXY).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
+    expect(env.HTTPS_PROXY).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
+    expect(env.http_proxy).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
+    expect(env.https_proxy).toMatch(/^http:\/\/host\.docker\.internal:\d+$/);
   });
 
   it('attaches nanoclaw-proxy network when permissionApproval is true', async () => {
@@ -231,8 +231,8 @@ describe('container-runner spawn args', () => {
     const env = envArgs(args);
     // When permissionApproval is false, the credential proxy URL (host.docker.internal)
     // must NOT be injected. A system-level proxy may still appear from process.env.
-    expect(env['HTTP_PROXY'] ?? '').not.toMatch(/host\.docker\.internal/);
-    expect(env['HTTPS_PROXY'] ?? '').not.toMatch(/host\.docker\.internal/);
+    expect(env.HTTP_PROXY ?? '').not.toMatch(/host\.docker\.internal/);
+    expect(env.HTTPS_PROXY ?? '').not.toMatch(/host\.docker\.internal/);
   });
 
   it('registers container IP in group registry when permissionApproval is true', async () => {

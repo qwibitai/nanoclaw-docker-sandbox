@@ -1,6 +1,6 @@
-import type { ChildProcess } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import type { ChildProcess } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { DATA_DIR, MAX_CONCURRENT_CONTAINERS } from './config.js';
 import { logger } from './logger.js';
@@ -290,6 +290,7 @@ export class GroupQueue {
 
     // Tasks first (they won't be re-discovered from SQLite like messages)
     if (state.pendingTasks.length > 0) {
+      // biome-ignore lint/style/noNonNullAssertion: guarded by pendingTasks.length > 0
       const task = state.pendingTasks.shift()!;
       this.runTask(groupJid, task).catch((err) =>
         logger.error(
@@ -320,11 +321,13 @@ export class GroupQueue {
       this.waitingGroups.length > 0 &&
       this.activeCount < MAX_CONCURRENT_CONTAINERS
     ) {
+      // biome-ignore lint/style/noNonNullAssertion: guarded by waitingGroups.length > 0
       const nextJid = this.waitingGroups.shift()!;
       const state = this.getGroup(nextJid);
 
       // Prioritize tasks over messages
       if (state.pendingTasks.length > 0) {
+        // biome-ignore lint/style/noNonNullAssertion: guarded by pendingTasks.length > 0
         const task = state.pendingTasks.shift()!;
         this.runTask(nextJid, task).catch((err) =>
           logger.error(
@@ -351,7 +354,7 @@ export class GroupQueue {
     // via idle timeout or container timeout. The --rm flag cleans them up on exit.
     // This prevents WhatsApp reconnection restarts from killing working agents.
     const activeContainers: string[] = [];
-    for (const [jid, state] of this.groups) {
+    for (const [_jid, state] of this.groups) {
       if (state.process && !state.process.killed && state.containerName) {
         activeContainers.push(state.containerName);
       }

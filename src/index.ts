@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import {
   ASSISTANT_NAME,
@@ -10,15 +10,16 @@ import {
   TRIGGER_PATTERN,
 } from './config.js';
 import {
-  startCredentialProxy,
-  loadPendingProxyMessages,
   handleProxyPermissionResponse,
+  loadPendingProxyMessages,
+  startCredentialProxy,
 } from './credential-proxy.js';
 import './channels/index.js';
 import {
   getChannelFactory,
   getRegisteredChannelNames,
 } from './channels/registry.js';
+import { resolveContainerGroup } from './container-group-registry.js';
 import {
   type ContainerOutput,
   runContainerAgent,
@@ -37,7 +38,6 @@ import {
   getAllTasks,
   getMessagesSince,
   getNewMessages,
-  getRegisteredGroup,
   getRouterState,
   initDatabase,
   setRegisteredGroup,
@@ -46,10 +46,10 @@ import {
   storeChatMetadata,
   storeMessage,
 } from './db.js';
-import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
-import { resolveContainerGroup } from './container-group-registry.js';
+import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
+import { logger } from './logger.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   isSenderAllowed,
@@ -59,7 +59,6 @@ import {
 } from './sender-allowlist.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import type { Channel, NewMessage, RegisteredGroup } from './types.js';
-import { logger } from './logger.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -477,7 +476,7 @@ async function main(): Promise<void> {
   initDatabase();
 
   // Ensure Docker proxy network exists for permission-approval containers
-  const { execSync } = await import('child_process');
+  const { execSync } = await import('node:child_process');
   try {
     execSync('./scripts/setup-proxy-network.sh', { stdio: 'pipe' });
   } catch (err) {
@@ -592,6 +591,7 @@ async function main(): Promise<void> {
   // Each channel self-registers via the barrel import above.
   // Factories return null when credentials are missing, so unconfigured channels are skipped.
   for (const channelName of getRegisteredChannelNames()) {
+    // biome-ignore lint/style/noNonNullAssertion: iterating names from getRegisteredChannelNames() guarantees factory exists
     const factory = getChannelFactory(channelName)!;
     const channel = factory(channelOpts);
     if (!channel) {
@@ -660,7 +660,7 @@ async function main(): Promise<void> {
       await Promise.all(
         channels
           .filter((ch) => ch.syncGroups)
-          .map((ch) => ch.syncGroups!(force)),
+          .map((ch) => ch.syncGroups?.(force)),
       );
     },
     getAvailableGroups,
@@ -677,8 +677,8 @@ async function main(): Promise<void> {
       if (channel?.sendPermissionRequest) {
         // Format subject display from toolName + toolInput
         const inputStr = JSON.stringify(toolInput ?? {});
-        const subject =
-          inputStr.length > 200 ? inputStr.slice(0, 200) + '…' : inputStr;
+        const _subject =
+          inputStr.length > 200 ? `${inputStr.slice(0, 200)}…` : inputStr;
         channel
           .sendPermissionRequest(
             chatJid,

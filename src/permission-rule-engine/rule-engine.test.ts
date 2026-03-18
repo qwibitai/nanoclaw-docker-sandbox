@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
 import * as fc from 'fast-check';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   _initTestDatabase,
-  insertPermissionRule,
   getPermissionRules,
+  insertPermissionRule,
 } from '../db.js';
 import { checkPermissionRule } from './rule-engine.js';
 

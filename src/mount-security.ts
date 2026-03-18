@@ -6,9 +6,9 @@
  *
  * Allowlist location: ~/.config/nanoclaw/mount-allowlist.json
  */
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import pino from 'pino';
 
 import { MOUNT_ALLOWLIST_PATH } from './config.js';
@@ -353,8 +353,10 @@ export function validateAdditionalMounts(
 
     if (result.allowed) {
       validatedMounts.push({
+        // biome-ignore lint/style/noNonNullAssertion: set when result.allowed is true
         hostPath: result.realHostPath!,
         containerPath: `/workspace/extra/${result.resolvedContainerPath}`,
+        // biome-ignore lint/style/noNonNullAssertion: set when result.allowed is true
         readonly: result.effectiveReadonly!,
       });
 

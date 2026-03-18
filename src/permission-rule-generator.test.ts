@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Must mock before importing the module under test
 const mockCreate = vi.fn();
@@ -10,10 +10,9 @@ vi.mock('@anthropic-ai/sdk', () => {
   return { default: MockAnthropic };
 });
 
-import Anthropic from '@anthropic-ai/sdk';
 import {
-  generateRuleProposal,
   buildPrompt,
+  generateRuleProposal,
   htmlEscape,
   validateProposal,
 } from './permission-rule-generator.js';

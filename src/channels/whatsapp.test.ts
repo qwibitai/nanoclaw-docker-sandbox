@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Mocks ---
 
@@ -109,8 +109,8 @@ vi.mock('@whiskeysockets/baileys', () => {
   };
 });
 
+import { getLastGroupSync, setLastGroupSync, updateChatName } from '../db.js';
 import { WhatsAppChannel, type WhatsAppChannelOpts } from './whatsapp.js';
-import { getLastGroupSync, updateChatName, setLastGroupSync } from '../db.js';
 
 // --- Test helpers ---
 

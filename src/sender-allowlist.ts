@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'node:fs';
 
 import { SENDER_ALLOWLIST_PATH } from './config.js';
 import { logger } from './logger.js';

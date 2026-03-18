@@ -14,13 +14,17 @@
  *   When `approvalCallbacks` is passed, all non-Anthropic traffic requires
  *   explicit approval via Telegram. HTTP and HTTPS (CONNECT) are both handled.
  */
-import { createServer, type Server } from 'http';
-import { request as httpsRequest } from 'https';
-import { request as httpRequest, type RequestOptions } from 'http';
-import net from 'net';
-import fs from 'fs';
-import path from 'path';
 
+import fs from 'node:fs';
+import {
+  createServer,
+  request as httpRequest,
+  type RequestOptions,
+  type Server,
+} from 'node:http';
+import { request as httpsRequest } from 'node:https';
+import net from 'node:net';
+import path from 'node:path';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
 import { DATA_DIR } from './config.js';
@@ -103,7 +107,7 @@ function appendPendingMessage(entry: PendingProxyMessage): void {
     });
     fs.appendFileSync(
       PENDING_PROXY_MESSAGES_FILE,
-      JSON.stringify(entry) + '\n',
+      `${JSON.stringify(entry)}\n`,
       'utf-8',
     );
   } catch {
@@ -321,7 +325,7 @@ export function startCredentialProxy(
           };
 
         // Strip hop-by-hop headers that must not be forwarded by proxies
-        delete headers['connection'];
+        delete headers.connection;
         delete headers['keep-alive'];
         delete headers['transfer-encoding'];
 
@@ -334,10 +338,10 @@ export function startCredentialProxy(
           // only when the container actually sends an Authorization header
           // (exchange request + auth probes). Post-exchange requests use
           // x-api-key only, so they pass through without token injection.
-          if (headers['authorization']) {
-            delete headers['authorization'];
+          if (headers.authorization) {
+            delete headers.authorization;
             if (oauthToken) {
-              headers['authorization'] = `Bearer ${oauthToken}`;
+              headers.authorization = `Bearer ${oauthToken}`;
             }
           }
         }
@@ -352,7 +356,7 @@ export function startCredentialProxy(
             agent: isHttps ? upstreamProxyAgent : undefined,
           } as RequestOptions,
           (upRes) => {
-            res.writeHead(upRes.statusCode!, upRes.headers);
+            res.writeHead(upRes.statusCode ?? 502, upRes.headers);
             upRes.pipe(res);
           },
         );

@@ -2,9 +2,9 @@
  * Container runtime abstraction for NanoClaw.
  * All runtime-specific logic lives here so swapping runtimes means changing one file.
  */
-import { execSync } from 'child_process';
-import fs from 'fs';
-import os from 'os';
+import { execSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 
 import { logger } from './logger.js';
 
@@ -34,7 +34,7 @@ function detectProxyBindHost(): string {
 
   // Bare-metal Linux: bind to the docker0 bridge IP instead of 0.0.0.0
   const ifaces = os.networkInterfaces();
-  const docker0 = ifaces['docker0'];
+  const docker0 = ifaces.docker0;
   if (docker0) {
     const ipv4 = docker0.find((a) => a.family === 'IPv4');
     if (ipv4) return ipv4.address;

@@ -6,14 +6,10 @@
  *
  * Usage: npx tsx src/whatsapp-auth.ts
  */
-import fs from 'fs';
-import https from 'https';
-import path from 'path';
-import pino from 'pino';
-import qrcode from 'qrcode-terminal';
-import readline from 'readline';
-import { HttpsProxyAgent } from 'https-proxy-agent';
 
+import fs from 'node:fs';
+import https from 'node:https';
+import readline from 'node:readline';
 import makeWASocket, {
   Browsers,
   DisconnectReason,
@@ -21,6 +17,9 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import pino from 'pino';
+import qrcode from 'qrcode-terminal';
 
 // Create proxy agent from environment if available
 const proxyUrl =

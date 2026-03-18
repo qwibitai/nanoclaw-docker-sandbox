@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   _initTestDatabase,
@@ -8,7 +8,7 @@ import {
   getTaskById,
   setRegisteredGroup,
 } from './db.js';
-import { processTaskIpc, type IpcDeps } from './ipc.js';
+import { type IpcDeps, processTaskIpc } from './ipc.js';
 import type { RegisteredGroup } from './types.js';
 
 // Set up registered groups used across tests
@@ -181,7 +181,7 @@ describe('pause_task authorization', () => {
       true,
       deps,
     );
-    expect(getTaskById('task-other')!.status).toBe('paused');
+    expect(getTaskById('task-other')?.status).toBe('paused');
   });
 
   it('non-main group can pause its own task', async () => {
@@ -191,7 +191,7 @@ describe('pause_task authorization', () => {
       false,
       deps,
     );
-    expect(getTaskById('task-other')!.status).toBe('paused');
+    expect(getTaskById('task-other')?.status).toBe('paused');
   });
 
   it('non-main group cannot pause another groups task', async () => {
@@ -201,7 +201,7 @@ describe('pause_task authorization', () => {
       false,
       deps,
     );
-    expect(getTaskById('task-main')!.status).toBe('active');
+    expect(getTaskById('task-main')?.status).toBe('active');
   });
 });
 
@@ -230,7 +230,7 @@ describe('resume_task authorization', () => {
       true,
       deps,
     );
-    expect(getTaskById('task-paused')!.status).toBe('active');
+    expect(getTaskById('task-paused')?.status).toBe('active');
   });
 
   it('non-main group can resume its own task', async () => {
@@ -240,7 +240,7 @@ describe('resume_task authorization', () => {
       false,
       deps,
     );
-    expect(getTaskById('task-paused')!.status).toBe('active');
+    expect(getTaskById('task-paused')?.status).toBe('active');
   });
 
   it('non-main group cannot resume another groups task', async () => {
@@ -250,7 +250,7 @@ describe('resume_task authorization', () => {
       false,
       deps,
     );
-    expect(getTaskById('task-paused')!.status).toBe('paused');
+    expect(getTaskById('task-paused')?.status).toBe('paused');
   });
 });
 
@@ -604,6 +604,7 @@ describe('schedule_task context_mode', () => {
         prompt: 'bad context',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00',
+        // biome-ignore lint/suspicious/noExplicitAny: intentionally invalid value to test validation
         context_mode: 'bogus' as any,
         targetJid: 'other@g.us',
       },
@@ -655,9 +656,9 @@ describe('register_group success', () => {
     // Verify group was registered in DB
     const group = getRegisteredGroup('new@g.us');
     expect(group).toBeDefined();
-    expect(group!.name).toBe('New Group');
-    expect(group!.folder).toBe('new-group');
-    expect(group!.trigger).toBe('@Andy');
+    expect(group?.name).toBe('New Group');
+    expect(group?.folder).toBe('new-group');
+    expect(group?.trigger).toBe('@Andy');
   });
 
   it('register_group rejects request with missing fields', async () => {

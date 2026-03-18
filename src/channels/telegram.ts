@@ -1,16 +1,16 @@
-import https from 'https';
-import { type Api, type Context, type Filter, Bot } from 'grammy';
+import https from 'node:https';
+import { type Api, Bot, type Context, type Filter } from 'grammy';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
-import { registerChannel, type ChannelOpts } from './registry.js';
 import type {
   Channel,
   OnChatMetadata,
   OnInboundMessage,
   RegisteredGroup,
 } from '../types.js';
+import { type ChannelOpts, registerChannel } from './registry.js';
 
 export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;

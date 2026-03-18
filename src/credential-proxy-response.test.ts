@@ -3,7 +3,7 @@
  * Tests observable behavior that doesn't require a live proxy server.
  * For the 'always persists rule' path, see test/proxy-permission.integration.test.ts.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { _initTestDatabase } from './db.js';
 
 vi.mock('./logger.js', () => ({
@@ -19,11 +19,11 @@ vi.mock('./db.js', async (importOriginal) => {
   return { ...actual, insertPermissionRule: vi.fn() };
 });
 
-import { insertPermissionRule } from './db.js';
 import {
   handleProxyPermissionResponse,
   resolvePermission,
 } from './credential-proxy.js';
+import { insertPermissionRule } from './db.js';
 
 beforeEach(() => {
   _initTestDatabase();

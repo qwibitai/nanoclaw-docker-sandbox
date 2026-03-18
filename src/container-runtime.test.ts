@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock logger
 vi.mock('./logger.js', () => ({
@@ -17,13 +17,13 @@ vi.mock('child_process', () => ({
 }));
 
 import {
+  _resetProxyBridgeIpCache,
   CONTAINER_RUNTIME_BIN,
+  cleanupOrphans,
+  ensureContainerRuntimeRunning,
+  getProxyBridgeIp,
   readonlyMountArgs,
   stopContainer,
-  ensureContainerRuntimeRunning,
-  cleanupOrphans,
-  getProxyBridgeIp,
-  _resetProxyBridgeIpCache,
 } from './container-runtime.js';
 import { logger } from './logger.js';
 

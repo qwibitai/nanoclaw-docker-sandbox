@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  registerContainerGroup,
-  deregisterContainerGroup,
-  resolveContainerGroup,
   _clearRegistry,
+  deregisterContainerGroup,
+  registerContainerGroup,
+  resolveContainerGroup,
 } from './container-group-registry.js';
 
 beforeEach(() => {

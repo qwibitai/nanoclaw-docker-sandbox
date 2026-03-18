@@ -1,5 +1,5 @@
-import type { Channel, NewMessage } from './types.js';
 import { formatLocalTime } from './timezone.js';
+import type { Channel, NewMessage } from './types.js';
 
 export function escapeXml(s: string): string {
   if (!s) return '';

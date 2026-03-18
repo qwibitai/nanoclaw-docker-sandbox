@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   _initTestDatabase,
@@ -350,8 +350,8 @@ describe('task CRUD', () => {
 
     const task = getTaskById('task-1');
     expect(task).toBeDefined();
-    expect(task!.prompt).toBe('do something');
-    expect(task!.status).toBe('active');
+    expect(task?.prompt).toBe('do something');
+    expect(task?.status).toBe('active');
   });
 
   it('updates task status', () => {
@@ -369,7 +369,7 @@ describe('task CRUD', () => {
     });
 
     updateTask('task-2', { status: 'paused' });
-    expect(getTaskById('task-2')!.status).toBe('paused');
+    expect(getTaskById('task-2')?.status).toBe('paused');
   });
 
   it('deletes a task and its run logs', () => {
@@ -420,7 +420,9 @@ describe('message query LIMIT', () => {
     expect(messages[0]?.content).toBe('message 8');
     expect(messages[2]?.content).toBe('message 10');
     // Chronological order preserved
-    expect((messages[1]?.timestamp ?? '') > (messages[0]?.timestamp ?? '')).toBe(true);
+    expect(
+      (messages[1]?.timestamp ?? '') > (messages[0]?.timestamp ?? ''),
+    ).toBe(true);
     // newTimestamp reflects latest returned row
     expect(newTimestamp).toBe('2024-01-01T00:00:10.000Z');
   });
@@ -435,7 +437,9 @@ describe('message query LIMIT', () => {
     expect(messages).toHaveLength(3);
     expect(messages[0]?.content).toBe('message 8');
     expect(messages[2]?.content).toBe('message 10');
-    expect((messages[1]?.timestamp ?? '') > (messages[0]?.timestamp ?? '')).toBe(true);
+    expect(
+      (messages[1]?.timestamp ?? '') > (messages[0]?.timestamp ?? ''),
+    ).toBe(true);
   });
 
   it('returns all messages when count is under the limit', () => {

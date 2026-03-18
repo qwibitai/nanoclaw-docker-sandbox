@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
-  registerChannel,
   getChannelFactory,
   getRegisteredChannelNames,
+  registerChannel,
 } from './registry.js';
 
 // The registry is module-level state, so we need a fresh module per test.
