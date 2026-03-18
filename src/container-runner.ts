@@ -21,6 +21,7 @@ import { logger } from './logger.js';
 import {
   CONTAINER_HOST_GATEWAY,
   CONTAINER_RUNTIME_BIN,
+  getProxyBridgeIp,
   hostGatewayArgs,
   readonlyMountArgs,
   stopContainer,
@@ -304,15 +305,24 @@ function buildContainerArgs(
     `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
   );
 
-  // Permission approval: use nanoclaw-proxy bridge + inject proxy env vars.
-  // The nanoclaw-proxy bridge has no external routing (--internal Docker flag).
-  // All HTTP/HTTPS from the container goes through the credential proxy.
+  // Permission approval: use nanoclaw-proxy bridge (--internal) + route all
+  // HTTP/HTTPS through the credential proxy. The --internal flag prevents any
+  // direct internet access; the only exit is through the proxy.
+  //
+  // Key: use the bridge gateway IP (e.g. 172.20.0.1) rather than
+  // 'host.docker.internal' or 'host-gateway' for --add-host and proxy URLs.
+  // On macOS Docker Desktop, 'host-gateway' resolves to the VM host IP
+  // (192.168.65.254 or an IPv6 address) which is *outside* the bridge subnet
+  // and unreachable on --internal networks. The bridge gateway IS within the
+  // subnet and always reachable. Falls back to host-gateway if the network
+  // doesn't exist yet (e.g. before setup-proxy-network.sh has been run).
   if (permissionApproval) {
     args.push('--network', 'nanoclaw-proxy');
-    // --internal networks have no gateway, so host.docker.internal won't resolve
-    // via Docker's automatic DNS. Inject it explicitly via /etc/hosts.
-    args.push('--add-host', 'host.docker.internal:host-gateway');
-    const proxyUrl = `http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`;
+    const bridgeIp = getProxyBridgeIp();
+    const addHostValue = bridgeIp ?? 'host-gateway';
+    args.push('--add-host', `host.docker.internal:${addHostValue}`);
+    const proxyHost = bridgeIp ?? CONTAINER_HOST_GATEWAY;
+    const proxyUrl = `http://${proxyHost}:${CREDENTIAL_PROXY_PORT}`;
     args.push('-e', `HTTP_PROXY=${proxyUrl}`);
     args.push('-e', `HTTPS_PROXY=${proxyUrl}`);
     args.push('-e', `http_proxy=${proxyUrl}`);

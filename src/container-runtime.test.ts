@@ -22,11 +22,14 @@ import {
   stopContainer,
   ensureContainerRuntimeRunning,
   cleanupOrphans,
+  getProxyBridgeIp,
+  _resetProxyBridgeIpCache,
 } from './container-runtime.js';
 import { logger } from './logger.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  _resetProxyBridgeIpCache();
 });
 
 // --- Pure functions ---
@@ -73,6 +76,55 @@ describe('ensureContainerRuntimeRunning', () => {
       'Container runtime is required but failed to start',
     );
     expect(logger.error).toHaveBeenCalled();
+  });
+});
+
+// --- getProxyBridgeIp ---
+
+describe('getProxyBridgeIp', () => {
+  it('returns the gateway IP from docker network inspect', () => {
+    mockExecSync.mockReturnValueOnce('172.20.0.1\n');
+
+    const ip = getProxyBridgeIp();
+
+    expect(ip).toBe('172.20.0.1');
+    expect(mockExecSync).toHaveBeenCalledWith(
+      expect.stringContaining('network inspect nanoclaw-proxy'),
+      expect.objectContaining({ encoding: 'utf-8' }),
+    );
+  });
+
+  it('caches the result so docker is only called once', () => {
+    mockExecSync.mockReturnValue('172.20.0.1\n');
+
+    getProxyBridgeIp();
+    getProxyBridgeIp();
+
+    expect(mockExecSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null when docker network inspect fails', () => {
+    mockExecSync.mockImplementationOnce(() => {
+      throw new Error('network not found');
+    });
+
+    expect(getProxyBridgeIp()).toBeNull();
+  });
+
+  it('returns null when output is empty', () => {
+    mockExecSync.mockReturnValueOnce('');
+
+    expect(getProxyBridgeIp()).toBeNull();
+  });
+
+  it('cache can be reset between calls', () => {
+    mockExecSync.mockReturnValue('172.20.0.1\n');
+
+    getProxyBridgeIp();
+    _resetProxyBridgeIpCache();
+    getProxyBridgeIp();
+
+    expect(mockExecSync).toHaveBeenCalledTimes(2);
   });
 });
 

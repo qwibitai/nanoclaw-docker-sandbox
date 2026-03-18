@@ -51,6 +51,39 @@ export function hostGatewayArgs(): string[] {
   return [];
 }
 
+// ---------------------------------------------------------------------------
+// Proxy bridge IP (for --internal network isolation)
+// ---------------------------------------------------------------------------
+
+let _cachedBridgeIp: string | null | undefined = undefined; // undefined = not yet fetched
+
+/**
+ * Returns the gateway IP of the nanoclaw-proxy Docker bridge network.
+ * This IP is within the bridge subnet and reachable even when the network
+ * uses --internal (which blocks routing outside the subnet).
+ * Using it for --add-host and proxy URLs is what allows --internal isolation
+ * to work: the container can reach the credential proxy without a default route.
+ * Returns null if the network doesn't exist or Docker is unavailable.
+ */
+export function getProxyBridgeIp(): string | null {
+  if (_cachedBridgeIp !== undefined) return _cachedBridgeIp;
+  try {
+    const result = execSync(
+      `${CONTAINER_RUNTIME_BIN} network inspect nanoclaw-proxy --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'`,
+      { encoding: 'utf-8', stdio: 'pipe', timeout: 5000 },
+    ).trim();
+    _cachedBridgeIp = result || null;
+  } catch {
+    _cachedBridgeIp = null;
+  }
+  return _cachedBridgeIp;
+}
+
+/** @internal — for tests only. */
+export function _resetProxyBridgeIpCache(): void {
+  _cachedBridgeIp = undefined;
+}
+
 /** Returns CLI args for a readonly bind mount. */
 export function readonlyMountArgs(
   hostPath: string,
