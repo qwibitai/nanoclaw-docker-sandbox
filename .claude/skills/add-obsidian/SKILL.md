@@ -262,59 +262,79 @@ EOF
 
 This step creates a daily scheduled task that reads conversation history and automatically updates the vault with durable information.
 
-Use the `mcp__nanoclaw__schedule_task` tool:
+Insert the task directly into the NanoClaw database (replace `[USER_LANG]` with the actual language value):
 
-```
-schedule_type: cron
-schedule_value: 0 23 * * *
-context_mode: group
-prompt: (see below — adapt USER_NAME and USER_LANG to the actual values)
-```
+```bash
+node -e "
+const Database = require('better-sqlite3');
+const db = new Database('./store/messages.db');
 
-**Prompt to use** (replace `[USER_NAME]` and `[USER_LANG]` with actual values):
+// Get all non-global registered groups
+const groups = db.prepare(\"SELECT jid, folder FROM registered_groups WHERE folder != 'global'\").all();
+if (groups.length === 0) { console.error('No groups found'); process.exit(1); }
 
-```
-You are a NanoClaw agent. Your task: consolidate important information from today's conversations into the shared Obsidian memory vault.
+const PROMPT = \`You are a NanoClaw agent. Your task: consolidate important information from today's conversations into the shared Obsidian memory vault.
 
 ## Vault location
-`/workspace/extra/obsidian/` — start by reading `_index.md`.
+\\\`/workspace/extra/obsidian/\\\` — start by reading \\\`_index.md\\\`.
 
 ## Procedure
 
 ### 1. Read recent conversation history
-Read session files in `/home/node/.claude/projects/-workspace-group/*.jsonl`.
-Extract only `queue-operation` entries with `operation: enqueue` from the last 24 hours.
-Parse the `content` field to get the conversation exchanges.
+Read session files in \\\`/home/node/.claude/projects/-workspace-group/*.jsonl\\\`.
+Extract only queue-operation entries with operation: enqueue from the last 24 hours.
+Parse the content field to get the conversation exchanges.
 
 ### 2. Identify durable information
 Only retain what deserves long-term memory:
-- ✅ New user preferences discovered
-- ✅ Important technical or project decisions
-- ✅ New projects or status changes on existing projects
-- ✅ Biographical or contextual info about the user
-- ✅ Bugs resolved or features delivered
-- ❌ Casual conversation (greetings, one-off questions with no lasting impact)
-- ❌ Information already present in the vault
+- New user preferences discovered
+- Important technical or project decisions
+- New projects or status changes on existing projects
+- Biographical or contextual info about the user
+- Bugs resolved or features delivered
+- NOT: casual conversation, greetings, one-off questions
+- NOT: information already present in the vault
 
 ### 3. Update the vault
 For each durable piece of information:
 - Update the relevant existing file (users/, projects/, system/)
 - Create a new file if needed (follow conventions in system/memory.md)
-- Update the `updated:` frontmatter field
-- Add new projects to `_index.md` if needed
+- Update the updated: frontmatter field
+- Add new projects to _index.md if needed
 
 ### 4. Write consolidation log
-Update `/workspace/extra/obsidian/system/consolidations.md`:
+Update \\\`/workspace/extra/obsidian/system/consolidations.md\\\`:
 - Date of consolidation
 - Number of files updated
 - 2-3 line summary of what was memorized
 
 ### Rules
 - Write content in [USER_LANG]
-- Be conservative: when in doubt, don't write
+- Be conservative: when in doubt, do not write
 - Keep files under ~80 lines (split if needed)
 - Do NOT send a message to the user unless a critical error occurs
-- Stay token-friendly: only load relevant vault files
+- Stay token-friendly: only load relevant vault files\`;
+
+const now = new Date();
+const nextRun = new Date();
+nextRun.setHours(23, 0, 0, 0);
+if (nextRun <= now) nextRun.setDate(nextRun.getDate() + 1);
+
+let created = 0;
+for (const group of groups) {
+  const taskId = 'task-' + Date.now() + '-obsidian-' + group.folder;
+  // Check if consolidation task already exists for this group
+  const existing = db.prepare(\"SELECT id FROM scheduled_tasks WHERE group_folder = ? AND schedule_value = '0 23 * * *' AND status = 'active'\").get(group.folder);
+  if (existing) { console.log('Already exists for:', group.folder); continue; }
+  db.prepare(\`INSERT INTO scheduled_tasks (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, next_run, status, created_at)
+    VALUES (?, ?, ?, ?, 'cron', '0 23 * * *', 'group', ?, 'active', ?)\`)
+    .run(taskId, group.folder, group.jid, PROMPT, nextRun.toISOString(), now.toISOString());
+  console.log('Task created for:', group.folder);
+  created++;
+}
+db.close();
+console.log('Done. Tasks created:', created);
+"
 ```
 
 ## Phase 7: Restart NanoClaw
