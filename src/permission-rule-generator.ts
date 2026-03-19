@@ -1,5 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 
+import { readEnvFile } from './env.js';
+import { logger } from './logger.js';
+
 export interface RuleProposal {
   /** Button label in Telegram — must be ≤ 40 chars */
   name: string;
@@ -124,7 +127,14 @@ export async function generateRuleProposal(
   subject: string,
   toolsList?: unknown[] | null,
 ): Promise<RuleProposal | null> {
-  const client = new Anthropic();
+  const secrets = readEnvFile(['HAIKU_API_KEY', 'ANTHROPIC_API_KEY']);
+  const apiKey = secrets.HAIKU_API_KEY || secrets.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    logger.warn('No API key for rule proposals (set HAIKU_API_KEY in .env)');
+    return null;
+  }
+
+  const client = new Anthropic({ apiKey });
   const prompt = buildPrompt(egressType, subject, toolsList);
 
   const haiku = client.messages.create({
@@ -140,11 +150,15 @@ export async function generateRuleProposal(
   let response: Awaited<typeof haiku> | null;
   try {
     response = await Promise.race([haiku, timeout]);
-  } catch {
+  } catch (err) {
+    logger.warn({ err, egressType, subject }, 'Haiku rule proposal failed');
     return null;
   }
 
-  if (response === null) return null;
+  if (response === null) {
+    logger.warn({ egressType, subject }, 'Haiku rule proposal timed out');
+    return null;
+  }
 
   const textBlock = response.content.find((b) => b.type === 'text');
   if (!textBlock || textBlock.type !== 'text') return null;
