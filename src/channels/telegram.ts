@@ -12,6 +12,10 @@ import type {
 } from '../types.js';
 import { type ChannelOpts, registerChannel } from './registry.js';
 
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
@@ -325,11 +329,11 @@ export class TelegramChannel implements Channel {
     let displaySubject: string;
     const mcpMatch = subject.match(/^mcp__([^_]+)__(.+)$/);
     if (mcpMatch) {
-      displaySubject = `${mcpMatch[1]} → \`${mcpMatch[2]}\``;
-    } else if (egressType === 'connect') {
-      displaySubject = `\`${subject}\``;
+      const server = mcpMatch[1] ?? '';
+      const tool = mcpMatch[2] ?? '';
+      displaySubject = `${escHtml(server)} → <code>${escHtml(tool)}</code>`;
     } else {
-      displaySubject = `\`${subject}\``;
+      displaySubject = `<code>${escHtml(subject)}</code>`;
     }
 
     const typeLabel =
@@ -349,14 +353,14 @@ export class TelegramChannel implements Channel {
       const isEmptyObject = raw === '{}' || raw === 'null' || raw === '""';
       if (!isEmptyObject && raw.trim()) {
         const truncated = raw.length > 500 ? `${raw.slice(0, 497)}...` : raw;
-        toolInputText = `\n\`\`\`\n${truncated}\n\`\`\``;
+        toolInputText = `\n<pre>${escHtml(truncated)}</pre>`;
       }
     }
 
     const text =
-      `🔐 *Permission*\n\n` +
+      `🔐 <b>Permission</b>\n\n` +
       `${typeLabel} ${displaySubject}\n` +
-      `Group: ${groupFolder}` +
+      `Group: ${escHtml(groupFolder)}` +
       toolInputText;
 
     const alwaysButton = proposal
@@ -377,7 +381,7 @@ export class TelegramChannel implements Channel {
     try {
       const numericId = jid.replace(/^tg:/, '');
       const msg = await this.bot.api.sendMessage(numericId, text, {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
         reply_markup: { inline_keyboard: keyboard },
       });
       logger.info({ jid, requestId }, 'Permission request sent');
