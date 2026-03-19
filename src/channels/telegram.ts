@@ -317,6 +317,7 @@ export class TelegramChannel implements Channel {
     subject: string,
     groupFolder: string,
     proposal: { name: string; pattern: string; scope: string } | null,
+    toolInput?: unknown,
   ): Promise<number | null> {
     if (!this.bot) return null;
 
@@ -327,12 +328,21 @@ export class TelegramChannel implements Channel {
           ? 'HTTP request'
           : 'MCP call';
 
+    let toolInputText = '';
+    if (toolInput != null) {
+      const raw = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput, null, 2);
+      // Truncate to avoid Telegram message length limits
+      const truncated = raw.length > 500 ? `${raw.slice(0, 497)}...` : raw;
+      toolInputText = `\nInput: \`${truncated}\``;
+    }
+
     const text =
       `🔐 *Permission Request*\n\n` +
       `Type: ${typeLabel}\n` +
       `Host: \`${subject}\`\n\n` +
       `Group: \`${groupFolder}\`` +
-      (proposal ? `\nRule: \`${proposal.pattern}\` (${proposal.scope})` : '');
+      (proposal ? `\nRule: \`${proposal.pattern}\` (${proposal.scope})` : '') +
+      toolInputText;
 
     const alwaysButton = proposal
       ? {

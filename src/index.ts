@@ -319,11 +319,25 @@ async function runAgent(
         chatJid,
         isMain,
         assistantName: ASSISTANT_NAME,
-
       },
       (proc, containerName) =>
         queue.registerProcess(chatJid, proc, containerName, group.folder),
       wrappedOnOutput,
+      {
+        sendPermissionRequest: async (req) => {
+          const channel = findChannel(channels, req.chatJid);
+          if (!channel?.sendPermissionRequest) return null;
+          return channel.sendPermissionRequest(
+            req.chatJid,
+            req.requestId,
+            req.egressType,
+            req.subject,
+            req.groupFolder,
+            req.proposal,
+            req.toolInput,
+          );
+        },
+      },
     );
 
     if (output.newSessionId) {
@@ -506,6 +520,7 @@ async function main(): Promise<void> {
           req.subject,
           req.groupFolder,
           req.proposal,
+          req.toolInput,
         );
       },
       onPermissionResponse: () => {
@@ -624,6 +639,19 @@ async function main(): Promise<void> {
       }
       const text = formatOutbound(rawText);
       if (text) await channel.sendMessage(jid, text);
+    },
+    sendPermissionRequest: async (req) => {
+      const channel = findChannel(channels, req.chatJid);
+      if (!channel?.sendPermissionRequest) return null;
+      return channel.sendPermissionRequest(
+        req.chatJid,
+        req.requestId,
+        req.egressType,
+        req.subject,
+        req.groupFolder,
+        req.proposal,
+        req.toolInput,
+      );
     },
   });
   startIpcWatcher({

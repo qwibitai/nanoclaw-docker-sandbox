@@ -4,10 +4,12 @@ import { CronExpressionParser } from 'cron-parser';
 
 import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
+  type BridgePermissionDeps,
   type ContainerOutput,
   runContainerAgent,
   writeTasksSnapshot,
 } from './container-runner.js';
+import type { PermissionRequest } from './credential-proxy.js';
 import {
   getAllTasks,
   getDueTasks,
@@ -74,6 +76,8 @@ export interface SchedulerDependencies {
     groupFolder: string,
   ) => void;
   sendMessage: (jid: string, text: string) => Promise<void>;
+  /** Optional: bridge permission deps for MCP tool gating in scheduled tasks. */
+  sendPermissionRequest?: (req: PermissionRequest) => Promise<number | null>;
 }
 
 async function runTask(
@@ -170,6 +174,11 @@ async function runTask(
   };
 
   try {
+    const bridgeDeps: BridgePermissionDeps | undefined =
+      deps.sendPermissionRequest
+        ? { sendPermissionRequest: deps.sendPermissionRequest }
+        : undefined;
+
     const output = await runContainerAgent(
       group,
       {
@@ -180,7 +189,6 @@ async function runTask(
         isMain,
         isScheduledTask: true,
         assistantName: ASSISTANT_NAME,
-
       },
       (proc, containerName) =>
         deps.onProcess(task.chat_jid, proc, containerName, task.group_folder),
@@ -199,6 +207,7 @@ async function runTask(
           error = streamedOutput.error || 'Unknown error';
         }
       },
+      bridgeDeps,
     );
 
     if (closeTimer) clearTimeout(closeTimer);

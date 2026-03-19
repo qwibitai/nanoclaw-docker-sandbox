@@ -30,7 +30,6 @@ export interface AllowedRoot {
 export interface ContainerConfig {
   additionalMounts?: AdditionalMount[];
   timeout?: number; // Default: 300000 (5 minutes)
-
 }
 
 export interface RegisteredGroup {
@@ -100,6 +99,7 @@ export interface Channel {
     subject: string, // URL, hostname:port, or tool name
     groupFolder: string,
     proposal: { name: string; pattern: string; scope: string } | null,
+    toolInput?: unknown, // MCP tool arguments for display
   ): Promise<number | null>;
 }
 

@@ -153,6 +153,36 @@ interface PendingPermission {
 /** Pending permission requests: requestId → pending data */
 const pendingPermissions = new Map<string, PendingPermission>();
 
+// ---------------------------------------------------------------------------
+// Unified permission resolver registry
+// ---------------------------------------------------------------------------
+// Both the proxy (for HTTP/HTTPS) and MCP bridges register their resolvers
+// here. When a Telegram button is tapped, handleProxyPermissionResponse checks
+// both the proxy's own pendingPermissions and this registry.
+
+/** Metadata stored alongside a registered resolver. */
+export interface PermissionResolverEntry {
+  resolve: (decision: 'allow' | 'deny') => void;
+  egressType: EgressType;
+  proposal: RuleProposal | null;
+  groupFolder: string;
+}
+
+const permissionResolverRegistry = new Map<string, PermissionResolverEntry>();
+
+/** Register a permission resolver so Telegram callbacks can route to it. */
+export function registerPermissionResolver(
+  requestId: string,
+  entry: PermissionResolverEntry,
+): void {
+  permissionResolverRegistry.set(requestId, entry);
+}
+
+/** @internal — exposed for tests only. */
+export function _getRegistrySize(): number {
+  return permissionResolverRegistry.size;
+}
+
 /** Called by Telegram callback handler when a button is tapped */
 export function resolvePermission(
   requestId: string,
@@ -448,7 +478,12 @@ export function handleProxyPermissionResponse(
   requestId: string,
   decision: 'once' | 'always' | 'deny',
 ): void {
-  const pending = pendingPermissions.get(requestId);
+  // Check proxy's own pending map first (existing behavior)
+  const proxyPending = pendingPermissions.get(requestId);
+  // Also check the unified registry (for bridge permissions)
+  const registryEntry = permissionResolverRegistry.get(requestId);
+
+  const pending = proxyPending ?? registryEntry;
 
   if (decision === 'always' && pending?.proposal) {
     insertPermissionRule({
@@ -465,6 +500,13 @@ export function handleProxyPermissionResponse(
     });
   }
 
-  const resolved = decision !== 'deny' ? 'allow' : 'deny';
-  resolvePermission(requestId, resolved);
+  const resolved: 'allow' | 'deny' = decision !== 'deny' ? 'allow' : 'deny';
+
+  if (proxyPending) {
+    resolvePermission(requestId, resolved);
+  }
+  if (registryEntry) {
+    permissionResolverRegistry.delete(requestId);
+    registryEntry.resolve(resolved);
+  }
 }

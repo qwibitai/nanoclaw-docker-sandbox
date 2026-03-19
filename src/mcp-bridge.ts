@@ -10,10 +10,11 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 
+import { registerPermissionResolver } from './credential-proxy.js';
+import type { PermissionRequest } from './credential-proxy.js';
 import { logger } from './logger.js';
 import { checkPermissionRule } from './permission-rule-engine/rule-engine.js';
 import { generateRuleProposal } from './permission-rule-generator.js';
-import type { PermissionRequest } from './credential-proxy.js';
 
 export interface BridgeConfig {
   name: string;
@@ -122,6 +123,15 @@ export function createMcpBridge(
         resolve('deny');
       }, PERMISSION_TIMEOUT_MS);
       pendingPermissions.set(requestId, { resolve, timeout });
+    });
+
+    // Register in the unified resolver registry so Telegram callback
+    // routing can find this bridge's resolver alongside proxy resolvers.
+    registerPermissionResolver(requestId, {
+      resolve: (decision) => resolvePermission(requestId, decision === 'allow' ? 'allow' : 'deny'),
+      egressType: 'mcp',
+      proposal,
+      groupFolder: deps.groupFolder,
     });
 
     try {
