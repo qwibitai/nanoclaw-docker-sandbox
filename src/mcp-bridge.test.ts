@@ -22,7 +22,6 @@ import {
 function makeDeps(overrides?: Partial<McpBridgeDeps>): McpBridgeDeps {
   return {
     sendPermissionRequest: vi.fn().mockResolvedValue(42),
-    onPermissionResponse: vi.fn(),
     groupFolder: 'test-group',
     chatJid: 'tg:123',
     ...overrides,
@@ -114,13 +113,7 @@ describe('MCP bridge permission gating', () => {
     vi.mocked(checkPermissionRule).mockReturnValue(undefined);
     const deps = makeDeps();
     const bridge = createMcpBridge(testConfig, deps);
-    // Simulate approval in background
-    vi.mocked(deps.sendPermissionRequest).mockImplementation(async () => {
-      setTimeout(() => bridge.resolvePermission('test-request-id', 'once'), 10);
-      return 42;
-    });
-    // We can't predict the requestId, so resolve via a different approach:
-    // Override sendPermissionRequest to capture the requestId, then resolve it
+    // Simulate approval: capture the requestId and resolve it
     vi.mocked(deps.sendPermissionRequest).mockImplementation(async (req) => {
       setTimeout(() => bridge.resolvePermission(req.requestId, 'once'), 10);
       return 42;

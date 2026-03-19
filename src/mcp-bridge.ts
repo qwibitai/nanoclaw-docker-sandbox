@@ -21,7 +21,6 @@ export interface BridgeConfig {
 
 export interface McpBridgeDeps {
   sendPermissionRequest: (req: PermissionRequest) => Promise<number | null>;
-  onPermissionResponse: (requestId: string, decision: string) => void;
   groupFolder: string;
   chatJid: string;
 }
@@ -88,11 +87,13 @@ export function createMcpBridge(
     params: Record<string, unknown>,
   ): string {
     if (method === 'tools/call') {
-      const toolName = params.name as string;
+      const toolName =
+        typeof params.name === 'string' ? params.name : '<unknown>';
       return `mcp__${config.name}__${toolName}`;
     }
     if (method === 'resources/read') {
-      const uri = params.uri as string;
+      const uri =
+        typeof params.uri === 'string' ? params.uri : '<unknown>';
       return `mcp__${config.name}__resource:${uri}`;
     }
     return `mcp__${config.name}__${method}`;
@@ -203,6 +204,10 @@ export function createMcpBridge(
     }
 
     const server = net.createServer((conn) => {
+      conn.on('error', (err) => {
+        logger.error({ err, name: config.name }, 'Bridge: connection error');
+      });
+
       let buffer = '';
       let processing = false;
       const pendingLines: string[] = [];
