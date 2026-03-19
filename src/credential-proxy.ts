@@ -63,6 +63,8 @@ export interface PermissionRequest {
   groupFolder: string;
   chatJid: string;
   proposal: RuleProposal | null;
+  /** Tool input / arguments for MCP gated calls (optional, used for display). */
+  toolInput?: unknown;
 }
 
 export interface PermissionApprovalCallbacks {
