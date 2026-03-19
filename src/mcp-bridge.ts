@@ -14,7 +14,7 @@ import { registerPermissionResolver } from './credential-proxy.js';
 import type { PermissionRequest } from './credential-proxy.js';
 import { logger } from './logger.js';
 import { checkPermissionRule } from './permission-rule-engine/rule-engine.js';
-import { generateRuleProposal } from './permission-rule-generator.js';
+import type { RuleProposal } from './permission-rule-generator.js';
 
 export interface BridgeConfig {
   name: string;
@@ -145,8 +145,14 @@ export function createMcpBridge(
     // No rule match — send Telegram approval
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    // Generate Haiku rule proposal eagerly (before sending Telegram message)
-    const proposal = await generateRuleProposal('mcp', subject, toolsList);
+    // Static rule proposal for MCP — pattern is deterministic, no AI needed.
+    // "Allow all tools on this MCP server for this group"
+    const proposal: RuleProposal = {
+      name: `Allow ${config.name} tools`,
+      pattern: `mcp__${config.name}__*`,
+      scope: 'group',
+      description: `Allow all ${config.name} MCP tools for this group`,
+    };
 
     const decisionPromise = new Promise<'allow' | 'deny'>((resolve) => {
       const timeout = setTimeout(() => {

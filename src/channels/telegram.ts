@@ -321,30 +321,42 @@ export class TelegramChannel implements Channel {
   ): Promise<number | null> {
     if (!this.bot) return null;
 
+    // Format subject for display
+    let displaySubject: string;
+    const mcpMatch = subject.match(/^mcp__([^_]+)__(.+)$/);
+    if (mcpMatch) {
+      displaySubject = `${mcpMatch[1]} → \`${mcpMatch[2]}\``;
+    } else if (egressType === 'connect') {
+      displaySubject = `\`${subject}\``;
+    } else {
+      displaySubject = `\`${subject}\``;
+    }
+
     const typeLabel =
       egressType === 'connect'
-        ? 'HTTPS connection'
+        ? '🌐 HTTPS'
         : egressType === 'http'
-          ? 'HTTP request'
-          : 'MCP call';
+          ? '🌐 HTTP'
+          : '🔧 MCP';
 
+    // Only show input if it has meaningful content (not empty object/null)
     let toolInputText = '';
     if (toolInput != null) {
       const raw =
         typeof toolInput === 'string'
           ? toolInput
           : JSON.stringify(toolInput, null, 2);
-      // Truncate to avoid Telegram message length limits
-      const truncated = raw.length > 500 ? `${raw.slice(0, 497)}...` : raw;
-      toolInputText = `\nInput: \`${truncated}\``;
+      const isEmptyObject = raw === '{}' || raw === 'null' || raw === '""';
+      if (!isEmptyObject && raw.trim()) {
+        const truncated = raw.length > 500 ? `${raw.slice(0, 497)}...` : raw;
+        toolInputText = `\n\`\`\`\n${truncated}\n\`\`\``;
+      }
     }
 
     const text =
-      `🔐 *Permission Request*\n\n` +
-      `Type: ${typeLabel}\n` +
-      `Host: \`${subject}\`\n\n` +
-      `Group: \`${groupFolder}\`` +
-      (proposal ? `\nRule: \`${proposal.pattern}\` (${proposal.scope})` : '') +
+      `🔐 *Permission*\n\n` +
+      `${typeLabel} ${displaySubject}\n` +
+      `Group: ${groupFolder}` +
       toolInputText;
 
     const alwaysButton = proposal
