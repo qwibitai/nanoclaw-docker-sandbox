@@ -12,6 +12,9 @@ vi.mock('../env.js', () => ({ readEnvFile: vi.fn(() => ({})) }));
 vi.mock('../config.js', () => ({
   ASSISTANT_NAME: 'Andy',
   TRIGGER_PATTERN: /^@Andy\b/i,
+  TELEGRAM_WEBHOOK_URL: 'https://example.com/webhook',
+  TELEGRAM_WEBHOOK_SECRET: 'test-secret',
+  TELEGRAM_WEBHOOK_PORT: 0,
 }));
 
 // Mock logger
@@ -22,6 +25,14 @@ vi.mock('../logger.js', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+// Mock webhook server
+vi.mock('../telegram-webhook.js', () => ({
+  startWebhookServer: vi.fn().mockResolvedValue({
+    port: 3002,
+    stop: vi.fn().mockResolvedValue(undefined),
+  }),
 }));
 
 // --- Grammy mock ---
@@ -38,11 +49,21 @@ vi.mock('grammy', () => ({
     commandHandlers = new Map<string, Handler>();
     filterHandlers = new Map<string, Handler[]>();
     errorHandler: Handler | null = null;
+    botInfo = { username: 'andy_ai_bot', id: 12345 };
+    middlewares: Handler[] = [];
 
     api = {
       sendMessage: vi.fn().mockResolvedValue(undefined),
       sendChatAction: vi.fn().mockResolvedValue(undefined),
+      setWebhook: vi.fn().mockResolvedValue(true),
+      deleteWebhook: vi.fn().mockResolvedValue(true),
+      getWebhookInfo: vi.fn().mockResolvedValue({
+        url: 'https://example.com/webhook',
+        pending_update_count: 0,
+      }),
     };
+
+    init = vi.fn().mockResolvedValue(undefined);
 
     constructor(token: string) {
       this.token = token;
@@ -59,6 +80,10 @@ vi.mock('grammy', () => ({
       this.filterHandlers.set(filter, existing);
     }
 
+    use(handler: Handler) {
+      this.middlewares.push(handler);
+    }
+
     catch(handler: Handler) {
       this.errorHandler = handler;
     }
@@ -70,6 +95,7 @@ vi.mock('grammy', () => ({
 
     stop() {}
   },
+  webhookCallback: vi.fn(() => vi.fn()),
 }));
 
 import { TelegramChannel, type TelegramChannelOpts } from './telegram.js';
@@ -942,6 +968,122 @@ describe('TelegramChannel', () => {
     it('has name "telegram"', () => {
       const channel = new TelegramChannel('test-token', createTestOpts());
       expect(channel.name).toBe('telegram');
+    });
+  });
+
+  // --- Webhook mode ---
+
+  describe('webhook mode', () => {
+    it('calls bot.init() + setWebhook in webhook mode', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const bot = currentBot();
+      expect(bot.init).toHaveBeenCalled();
+      expect(bot.api.setWebhook).toHaveBeenCalledWith(
+        'https://example.com/webhook',
+        expect.objectContaining({ secret_token: 'test-secret' }),
+      );
+
+      await channel.disconnect();
+    });
+
+    it('starts webhook server with grammY handler', async () => {
+      const { startWebhookServer } = await import('../telegram-webhook.js');
+      const { webhookCallback } = await import('grammy');
+
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      expect(webhookCallback).toHaveBeenCalledWith(
+        expect.anything(),
+        'http',
+        expect.objectContaining({ secretToken: 'test-secret' }),
+      );
+      expect(startWebhookServer).toHaveBeenCalledWith(
+        expect.objectContaining({ port: 0 }),
+      );
+
+      await channel.disconnect();
+    });
+
+    it('registers dedup middleware before other handlers', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const bot = currentBot();
+      expect(bot.middlewares.length).toBeGreaterThanOrEqual(1);
+
+      await channel.disconnect();
+    });
+
+    it('dedup middleware skips duplicate update_ids', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const bot = currentBot();
+      // biome-ignore lint/style/noNonNullAssertion: middleware guaranteed registered in connect()
+      const dedupMiddleware = bot.middlewares[0]!;
+      const next = vi.fn();
+
+      // First call — passes through
+      await dedupMiddleware({ update: { update_id: 100 } }, next);
+      expect(next).toHaveBeenCalledTimes(1);
+
+      // Duplicate — skipped
+      next.mockClear();
+      await dedupMiddleware({ update: { update_id: 100 } }, next);
+      expect(next).not.toHaveBeenCalled();
+
+      // New update — passes through
+      next.mockClear();
+      await dedupMiddleware({ update: { update_id: 101 } }, next);
+      expect(next).toHaveBeenCalledTimes(1);
+
+      await channel.disconnect();
+    });
+
+    it('disconnect() closes webhook server then deletes webhook', async () => {
+      const { startWebhookServer } = await import('../telegram-webhook.js');
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      await channel.disconnect();
+
+      const bot = currentBot();
+      expect(bot.api.deleteWebhook).toHaveBeenCalled();
+      const serverResult = await (
+        startWebhookServer as ReturnType<typeof vi.fn>
+      ).mock.results[0]?.value;
+      expect(serverResult.stop).toHaveBeenCalled();
+    });
+
+    it('health monitor re-registers dropped webhook', async () => {
+      vi.useFakeTimers();
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const bot = currentBot();
+      // Simulate dropped webhook
+      bot.api.getWebhookInfo.mockResolvedValueOnce({
+        url: '',
+        pending_update_count: 0,
+      });
+
+      // Advance 5 minutes
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(bot.api.getWebhookInfo).toHaveBeenCalled();
+      expect(bot.api.setWebhook).toHaveBeenCalledTimes(2); // once on connect, once on re-register
+
+      await channel.disconnect();
+      vi.useRealTimers();
     });
   });
 });
