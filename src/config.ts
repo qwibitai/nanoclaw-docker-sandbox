@@ -52,7 +52,7 @@ export const CREDENTIAL_PROXY_PORT = parseInt(
   10,
 );
 export const TELEGRAM_WEBHOOK_PORT = parseInt(
-  process.env.TELEGRAM_WEBHOOK_PORT || '3002',
+  process.env.TELEGRAM_WEBHOOK_PORT || '47019',
   10,
 );
 export const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL || '';

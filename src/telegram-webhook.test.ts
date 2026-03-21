@@ -15,7 +15,11 @@ vi.mock('./logger.js', () => ({
   logger: { info: vi.fn(), error: vi.fn(), debug: vi.fn(), warn: vi.fn() },
 }));
 
-import { startWebhookServer, type WebhookServer } from './telegram-webhook.js';
+import {
+  isTelegramIp,
+  startWebhookServer,
+  type WebhookServer,
+} from './telegram-webhook.js';
 
 function makeRequest(
   port: number,
@@ -52,6 +56,7 @@ describe.skipIf(!canListen)('telegram-webhook', () => {
   it('GET /health returns 200 "ok"', async () => {
     server = await startWebhookServer({
       port: 0,
+      validateIp: false,
       handler: (_req, res) => {
         res.writeHead(200);
         res.end('handled');
@@ -73,7 +78,7 @@ describe.skipIf(!canListen)('telegram-webhook', () => {
       res.end(JSON.stringify({ received: true }));
     });
 
-    server = await startWebhookServer({ port: 0, handler });
+    server = await startWebhookServer({ port: 0, validateIp: false, handler });
 
     const result = await makeRequest(
       server.port,
@@ -93,6 +98,7 @@ describe.skipIf(!canListen)('telegram-webhook', () => {
   it('unknown paths return 404', async () => {
     server = await startWebhookServer({
       port: 0,
+      validateIp: false,
       handler: (_req, res) => {
         res.writeHead(200);
         res.end();
@@ -110,6 +116,7 @@ describe.skipIf(!canListen)('telegram-webhook', () => {
   it('non-POST to /webhook returns 404', async () => {
     server = await startWebhookServer({
       port: 0,
+      validateIp: false,
       handler: (_req, res) => {
         res.writeHead(200);
         res.end();
@@ -135,7 +142,7 @@ describe.skipIf(!canListen)('telegram-webhook', () => {
       res.end('done');
     };
 
-    server = await startWebhookServer({ port: 0, handler });
+    server = await startWebhookServer({ port: 0, validateIp: false, handler });
 
     const result = await makeRequest(server.port, {
       method: 'POST',
@@ -148,5 +155,95 @@ describe.skipIf(!canListen)('telegram-webhook', () => {
     // stop() must resolve (not hang or throw) even with a keepAlive socket open
     agent.destroy(); // release keepAlive socket so server.close() can finish
     await expect(server.stop()).resolves.toBeUndefined();
+  });
+
+  it('rejects POST /webhook from non-Telegram IP when validateIp is true', async () => {
+    const handler = vi.fn();
+
+    server = await startWebhookServer({
+      port: 0,
+      validateIp: true,
+      handler,
+    });
+
+    const result = await makeRequest(
+      server.port,
+      {
+        method: 'POST',
+        path: '/webhook',
+        headers: { 'cf-connecting-ip': '1.2.3.4' },
+      },
+      '{}',
+    );
+
+    expect(result.statusCode).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('accepts POST /webhook from Telegram IP when validateIp is true', async () => {
+    const handler = vi.fn((_req: IncomingMessage, res: ServerResponse) => {
+      res.writeHead(200);
+      res.end('ok');
+    });
+
+    server = await startWebhookServer({
+      port: 0,
+      validateIp: true,
+      handler,
+    });
+
+    const result = await makeRequest(
+      server.port,
+      {
+        method: 'POST',
+        path: '/webhook',
+        headers: { 'cf-connecting-ip': '149.154.167.50' },
+      },
+      '{}',
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('rejects POST /webhook with no cf-connecting-ip header when validateIp is true', async () => {
+    const handler = vi.fn();
+
+    server = await startWebhookServer({
+      port: 0,
+      validateIp: true,
+      handler,
+    });
+
+    const result = await makeRequest(
+      server.port,
+      { method: 'POST', path: '/webhook' },
+      '{}',
+    );
+
+    expect(result.statusCode).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe('isTelegramIp', () => {
+  it('accepts IPs in 149.154.160.0/20', () => {
+    expect(isTelegramIp('149.154.160.0')).toBe(true);
+    expect(isTelegramIp('149.154.167.50')).toBe(true);
+    expect(isTelegramIp('149.154.175.255')).toBe(true);
+  });
+
+  it('accepts IPs in 91.108.4.0/22', () => {
+    expect(isTelegramIp('91.108.4.0')).toBe(true);
+    expect(isTelegramIp('91.108.5.100')).toBe(true);
+    expect(isTelegramIp('91.108.7.255')).toBe(true);
+  });
+
+  it('rejects IPs outside Telegram ranges', () => {
+    expect(isTelegramIp('1.2.3.4')).toBe(false);
+    expect(isTelegramIp('149.154.159.255')).toBe(false);
+    expect(isTelegramIp('149.154.176.0')).toBe(false);
+    expect(isTelegramIp('91.108.3.255')).toBe(false);
+    expect(isTelegramIp('91.108.8.0')).toBe(false);
   });
 });
